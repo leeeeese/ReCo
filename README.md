@@ -6,24 +6,36 @@ LangGraph Agent 기반의 중고거래 상품 추천 시스템입니다.
 
 ```
 ReCo/
-├── main.py                    # FastAPI 웹 서버 + LangGraph 오케스트레이터
-├── src/
-│   ├── core/
-│   │   ├── state.py          # LangGraph State 정의
-│   │   ├── config.py         # 설정 관리
-│   │   └── database.py       # DB 연결 (MySQL + PostgreSQL)
-│   ├── agents/
-│   │   ├── persona_classifier.py    # 페르소나 분류 Agent
-│   │   ├── query_generator.py       # 검색 쿼리 생성 Agent
-│   │   ├── product_matching.py      # 상품 매칭 Agent
-│   │   ├── ranker.py               # 랭킹 Agent
-│   │   └── router.py               # 라우터 Agent
-│   ├── graphs/
-│   │   └── recommendation_graph.py  # LangGraph 정의
-│   └── api/
-│       ├── routes.py         # FastAPI 라우트
-│       └── schemas.py        # Pydantic 모델
-├── playbook/                 # 페르소나 정의서
+├── app/                       # Streamlit UI
+│   ├── main.py              # Streamlit 메인 애플리케이션
+│   ├── components/          # UI 컴포넌트
+│   └── utils/               # 유틸리티 함수
+├── server/                   # FastAPI 백엔드
+│   ├── main.py              # FastAPI 메인 애플리케이션
+│   ├── routers/             # API 라우터
+│   │   ├── workflow.py     # 워크플로우 API
+│   │   └── history.py      # 히스토리 API
+│   ├── db/                  # 데이터베이스
+│   │   ├── database.py     # DB 연결
+│   │   ├── models.py       # SQLAlchemy 모델
+│   │   └── schemas.py      # Pydantic 스키마
+│   ├── workflow/           # LangGraph 워크플로우
+│   │   ├── state.py        # State 정의
+│   │   ├── graph.py        # Graph 정의
+│   │   └── agents/         # Agent 구현
+│   │       ├── persona_classifier.py
+│   │       ├── query_generator.py
+│   │       ├── product_matching.py
+│   │       ├── ranker.py
+│   │       ├── router.py
+│   │       └── sql_generator.py
+│   ├── retrieval/          # RAG 검색
+│   │   ├── search_service.py
+│   │   ├── vector_store.py
+│   │   └── playbook/       # 페르소나 정의서
+│   └── utils/              # 유틸리티
+│       ├── config.py
+│       └── review_crawler.py
 └── requirements.txt
 ```
 
@@ -44,16 +56,29 @@ cp env.example .env
 
 ### 3. 데이터베이스 설정
 
-- **MySQL**: 기존 상품/판매자 데이터 저장
-- **PostgreSQL**: LangGraph State 저장
+기본적으로 SQLite를 사용합니다. 필요시 PostgreSQL이나 MySQL 설정 가능.
 
 ### 4. 서버 실행
 
+#### FastAPI 백엔드
+
 ```bash
+cd server
 python main.py
 ```
 
 서버가 실행되면 `http://localhost:8000`에서 API를 사용할 수 있습니다.
+
+API 문서: `http://localhost:8000/docs`
+
+#### Streamlit UI
+
+```bash
+cd app
+streamlit run main.py
+```
+
+브라우저에서 `http://localhost:8501`로 접속할 수 있습니다.
 
 ## 📚 API 사용법
 
@@ -115,9 +140,19 @@ curl "http://localhost:8000/api/v1/health"
 
 ## 📝 TODO
 
-- [ ] 실제 MySQL 데이터베이스 연동
-- [ ] 사용자 벡터 생성 로직 구현
-- [ ] SQL 쿼리 생성 Agent 구현
-- [ ] 웹 프론트엔드 구현
+- [ ] Agents 파일들의 import 경로 수정
+- [ ] 실제 DB 연동 및 데이터 로드
+- [ ] LangGraph 워크플로우 통합
+- [ ] RAG 벡터 스토어 구현
+- [ ] Streamlit UI와 FastAPI 연결
 - [ ] 로깅 및 모니터링 추가
 - [ ] 단위 테스트 작성
+
+## ⚠️ 주의사항
+
+현재 agents 파일들은 이전 프로젝트 구조에서 가져온 것으로, import 경로가 현재 프로젝트 구조와 맞지 않을 수 있습니다. 수정이 필요합니다:
+
+1. `server/workflow/agents/persona_classifier.py` - import 경로 수정
+2. `server/workflow/agents/product_matching.py` - import 경로 수정
+3. `server/workflow/agents/ranker.py` - import 경로 수정
+4. 기타 필요한 유틸리티 모듈 구현
