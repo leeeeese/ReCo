@@ -8,19 +8,20 @@ import json
 import numpy as np
 from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
-from ..core.state import RecommendationState, PersonaType, PersonaVector, PERSONA_PROTOTYPES
-from ..rag.vector_store import PlaybookVectorStore
-from ..rag.retriever import PlaybookRetriever
+from server.workflow.state import RecommendationState, PersonaType, PersonaVector, PERSONA_PROTOTYPES
+from server.retrieval.vector_store import VectorStore
+from server.retrieval.retriever import PlaybookRetriever
+from server.utils.tools import normalize_slider_inputs, calculate_l2_distance
 
 
 class PersonaClassifier:
     """페르소나 분류기"""
 
-    def __init__(self, playbook_dir: str = "./playbook", rules_path: str = "./src/config/rules.json"):
+    def __init__(self, playbook_dir: str = "./server/retrieval/playbook", rules_path: str = None):
         self.playbook_dir = playbook_dir
         self.rules_path = rules_path
-        self.rules = self._load_rules()
-        self.vector_store = PlaybookVectorStore()
+        self.rules = self._load_rules() if rules_path else {}
+        self.vector_store = VectorStore()
         self.retriever = None
         self._initialize_rag()
 
@@ -42,18 +43,7 @@ class PersonaClassifier:
 
         self.retriever = PlaybookRetriever(self.vector_store)
 
-    def normalize_slider_inputs(self, user_prefs: Dict[str, Any]) -> PersonaVector:
-        """슬라이더 입력을 정규화하여 페르소나 벡터 생성"""
-        # 슬라이더 값들을 0-100 범위로 정규화
-        normalized_vector = {}
-
-        for key in ["trust_safety", "quality_condition", "remote_transaction",
-                    "activity_responsiveness", "price_flexibility"]:
-            value = user_prefs.get(key, 50.0)  # 기본값 50
-            # 0-100 범위로 클램핑
-            normalized_vector[key] = max(0.0, min(100.0, float(value)))
-
-        return PersonaVector(**normalized_vector)
+    # normalize_slider_inputs는 tools.py로 이동됨
 
     def rag_classification(self, user_vector: PersonaVector, user_prefs: Dict[str, Any]) -> List[Dict[str, Any]]:
         """RAG를 통한 페르소나 분류"""
@@ -65,11 +55,7 @@ class PersonaClassifier:
 
         return persona_candidates
 
-    def calculate_l2_distance(self, vector1: PersonaVector, vector2: PersonaVector) -> float:
-        """두 벡터 간의 L2 거리 계산"""
-        keys = ["trust_safety", "quality_condition", "remote_transaction",
-                "activity_responsiveness", "price_flexibility"]
-        return np.sqrt(sum((vector1[key] - vector2[key]) ** 2 for key in keys))
+    # calculate_l2_distance는 tools.py로 이동됨
 
     def apply_rules_threshold(self, user_vector: PersonaVector, persona_candidates: List[Dict[str, Any]]) -> Tuple[PersonaType, float, str]:
         """rules.json의 threshold를 적용하여 최종 페르소나 결정"""
@@ -84,7 +70,7 @@ class PersonaClassifier:
         min_distance = float('inf')
         for persona_type, persona_data in PERSONA_PROTOTYPES.items():
             prototype_vector = persona_data["vector"]
-            distance = self.calculate_l2_distance(
+            distance = calculate_l2_distance(
                 user_vector, prototype_vector)
 
             if distance < min_distance:
@@ -145,7 +131,7 @@ class PersonaClassifier:
     def classify_persona(self, user_prefs: Dict[str, Any]) -> Dict[str, Any]:
         """전체 페르소나 분류 프로세스"""
         # 1. 슬라이더 입력 정규화
-        user_vector = self.normalize_slider_inputs(user_prefs)
+        user_vector = normalize_slider_inputs(user_prefs)
 
         # 2. RAG 분류
         persona_candidates = self.rag_classification(user_vector, user_prefs)

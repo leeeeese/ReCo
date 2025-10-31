@@ -3,57 +3,9 @@
 페르소나와 사용자 입력을 바탕으로 검색 쿼리를 생성합니다.
 """
 
-import re
-from typing import List, Dict, Any
-from ..core.state import RecommendationState, PersonaType
-
-
-def extract_keywords(query: str) -> List[str]:
-    """검색 쿼리에서 키워드 추출"""
-    # 간단한 키워드 추출 (실제로는 더 정교한 NLP 처리 필요)
-    keywords = re.findall(r'\b\w+\b', query.lower())
-    # 불용어 제거 (간단한 예시)
-    stop_words = {'의', '을', '를', '이', '가', '은', '는', '에',
-                  '에서', '로', '으로', '와', '과', '도', '만', '까지', '부터'}
-    keywords = [kw for kw in keywords if kw not in stop_words and len(kw) > 1]
-    return keywords
-
-
-def enhance_query_for_persona(original_query: str, persona_type: PersonaType) -> str:
-    """페르소나에 맞게 쿼리 향상"""
-    persona_enhancements = {
-        PersonaType.TRUST_SAFETY_PRO: "안전결제 신뢰도높은",
-        PersonaType.HIGH_QUALITY_NEW: "새상품 미개봉 상태좋은",
-        PersonaType.FAST_SHIPPING_ONLINE: "빠른배송 택배",
-        PersonaType.LOCAL_OFFLINE: "직거래 동네",
-        PersonaType.NEGOTIATION_FRIENDLY: "흥정 협상가능",
-        PersonaType.RESPONSIVE_KIND: "친절 응답빠른",
-        PersonaType.POWER_SELLER: "활발한 판매자",
-        PersonaType.NICHE_SPECIALIST: "전문가 전문상품",
-        PersonaType.BALANCED_LOW_ACTIVITY: "신중한 판매자",
-        PersonaType.HYBRID_TRADE: "온오프라인"
-    }
-
-    enhancement = persona_enhancements.get(persona_type, "")
-    if enhancement:
-        return f"{original_query} {enhancement}"
-    return original_query
-
-
-def create_filters(user_input: Dict[str, Any]) -> Dict[str, Any]:
-    """사용자 입력에서 필터 조건 생성"""
-    filters = {}
-
-    if user_input.get("price_min"):
-        filters["price_min"] = user_input["price_min"]
-    if user_input.get("price_max"):
-        filters["price_max"] = user_input["price_max"]
-    if user_input.get("category"):
-        filters["category"] = user_input["category"]
-    if user_input.get("location"):
-        filters["location"] = user_input["location"]
-
-    return filters
+from typing import Dict, Any
+from server.workflow.state import RecommendationState
+from server.utils.tools import extract_keywords, enhance_query_for_persona, create_filters
 
 
 def query_generator_node(state: RecommendationState) -> RecommendationState:
