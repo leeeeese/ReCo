@@ -68,10 +68,20 @@ class RecommendationState(TypedDict):
     user_input: Dict[str, Any]
     search_query: Optional[Dict[str, Any]]
     persona_classification: Optional[Dict[str, Any]]
+
+    # 서브에이전트 결과
+    price_agent_recommendations: Optional[Dict[str, Any]]
+    safety_agent_recommendations: Optional[Dict[str, Any]]
+    persona_matching_recommendations: Optional[Dict[str, Any]]
+
+    # 최종 결과
+    final_seller_recommendations: Optional[List[Dict[str, Any]]]
     seller_item_scores: Optional[List[Dict[str, Any]]]
     final_item_scores: Optional[List[Dict[str, Any]]]
     sql_query: Optional[Dict[str, Any]]
     ranking_explanation: Optional[str]
+
+    # 워크플로우 상태
     current_step: str
     completed_steps: List[str]
     error_message: Optional[str]
