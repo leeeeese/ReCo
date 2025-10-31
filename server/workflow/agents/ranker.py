@@ -4,17 +4,17 @@ Ranker(FusionRanker) Agent
 입력: seller_item_scores → 출력: final_item_scores
 """
 
-import numpy as np
-from typing import List, Dict, Any, Optional
-from ..core.state import RecommendationState
-from ..utils.chain_of_thought import ChainOfThought
+from typing import List, Dict, Any
+from server.workflow.state import RecommendationState
+from server.utils.tools import normalize_scores, calculate_diversity_score
 
 
 class FusionRanker:
     """융합 랭킹기"""
 
     def __init__(self):
-        self.cot = ChainOfThought()
+        # TODO: ChainOfThought 구현 필요시 추가
+        pass
 
     def fuse_scores(self, seller_item_scores: List[Dict[str, Any]],
                     persona_classification: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -36,10 +36,6 @@ class FusionRanker:
         # 4. 최종 점수 계산
         final_scores = self._calculate_final_scores(diversity_adjusted_scores)
 
-        # 5. Chain of Thought 추론 과정 기록
-        self._record_reasoning_process(seller_item_scores, final_scores,
-                                       persona_classification)
-
         return final_scores
 
     def _normalize_scores(self, seller_item_scores: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -55,15 +51,10 @@ class FusionRanker:
         feature_scores = [item['product_feature_score']
                           for item in seller_item_scores]
 
-        # Min-Max 정규화
-        def normalize_list(scores):
-            if not scores or max(scores) == min(scores):
-                return [0.5] * len(scores)
-            return [(score - min(scores)) / (max(scores) - min(scores)) for score in scores]
-
-        norm_persona = normalize_list(persona_scores)
-        norm_quality = normalize_list(quality_scores)
-        norm_feature = normalize_list(feature_scores)
+        # tools의 normalize_scores 사용
+        norm_persona = normalize_scores(persona_scores)
+        norm_quality = normalize_scores(quality_scores)
+        norm_feature = normalize_scores(feature_scores)
 
         # 정규화된 점수 적용
         normalized_items = []
@@ -124,16 +115,11 @@ class FusionRanker:
         if len(weighted_scores) <= 1:
             return weighted_scores
 
-        # 카테고리 다양성 계산
-        categories = [item['category'] for item in weighted_scores]
-        unique_categories = len(set(categories))
-        category_diversity = unique_categories / \
-            len(categories) if categories else 0
-
-        # 판매자 다양성 계산
-        sellers = [item['seller_id'] for item in weighted_scores]
-        unique_sellers = len(set(sellers))
-        seller_diversity = unique_sellers / len(sellers) if sellers else 0
+        # 다양성 계산 (tools 사용)
+        category_diversity = calculate_diversity_score(
+            weighted_scores, 'category')
+        seller_diversity = calculate_diversity_score(
+            weighted_scores, 'seller_id')
 
         # 다양성 보너스 적용
         diversity_bonus = 0.1 * (category_diversity + seller_diversity) / 2
@@ -173,47 +159,13 @@ class FusionRanker:
 
         return final_items
 
-    def _record_reasoning_process(self, original_scores: List[Dict[str, Any]],
-                                  final_scores: List[Dict[str, Any]],
-                                  persona_classification: Dict[str, Any]) -> None:
-        """추론 과정 기록"""
-        # 1. 입력 분석
-        self.cot.add_step("입력 분석", {
-            "total_items": len(original_scores),
-            "persona_type": persona_classification.get("persona_type"),
-            "confidence": persona_classification.get("confidence")
-        })
-
-        # 2. 정규화 과정
-        self.cot.add_step("점수 정규화", {
-            "method": "Min-Max Normalization",
-            "score_types": ["persona", "quality", "feature"]
-        })
-
-        # 3. 가중치 적용
-        self.cot.add_step("페르소나 가중치 적용", {
-            "persona_type": persona_classification.get("persona_type"),
-            "confidence_factor": 0.5 + (persona_classification.get("confidence", 0.5) * 0.5)
-        })
-
-        # 4. 다양성 보너스
-        categories = set(item['category'] for item in final_scores)
-        sellers = set(item['seller_id'] for item in final_scores)
-        self.cot.add_step("다양성 보너스 적용", {
-            "category_diversity": len(categories),
-            "seller_diversity": len(sellers)
-        })
-
-        # 5. 최종 랭킹
-        self.cot.add_step("최종 랭킹 생성", {
-            "top_item": final_scores[0]['title'] if final_scores else None,
-            "top_score": final_scores[0]['final_score'] if final_scores else 0
-        })
-
     def generate_explanation(self, final_scores: List[Dict[str, Any]],
                              persona_classification: Dict[str, Any]) -> str:
         """추천 근거 설명 생성"""
-        return self.cot.generate_explanation(final_scores, persona_classification)
+        # TODO: ChainOfThought 구현 필요시 상세 설명 생성
+        if not final_scores:
+            return "추천 결과가 없습니다."
+        return f"{len(final_scores)}개 상품이 추천되었습니다."
 
 
 def ranker_node(state: RecommendationState) -> RecommendationState:
@@ -241,7 +193,7 @@ def ranker_node(state: RecommendationState) -> RecommendationState:
 
         # 결과를 상태에 저장
         state["final_item_scores"] = final_item_scores
-        state["ranking_explanation"] = explanation
+        state["ranking_explanation"] = explanation or ""
         state["current_step"] = "products_ranked"
         state["completed_steps"].append("ranking")
 

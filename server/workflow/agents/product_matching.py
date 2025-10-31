@@ -4,17 +4,21 @@ ProductMatching Agent
 입력: persona, seller_features → 출력: seller_item_scores
 """
 
-import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
-from ..core.state import RecommendationState, PersonaVector, PersonaType, MATCHING_WEIGHTS
-from ..services.database_service import DatabaseService
+from server.workflow.state import RecommendationState, PersonaVector
+from server.utils.tools import (
+    calculate_persona_match_score,
+    calculate_seller_quality_score,
+    calculate_product_feature_score
+)
 
 
 class ProductMatching:
     """상품 매칭기"""
 
     def __init__(self):
-        self.db_service = DatabaseService()
+        # TODO: DB 서비스 구현 필요
+        self.db_service = None
 
     def match_user_seller_persona(self, user_persona: PersonaVector, sellers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """1단계: 사용자 페르소나 ↔ 판매자 페르소나 매칭"""
@@ -24,11 +28,11 @@ class ProductMatching:
             seller_vector = seller["persona_vector"]
 
             # 페르소나 매칭 점수 계산
-            persona_score = self._calculate_persona_score(
+            persona_score = calculate_persona_match_score(
                 user_persona, seller_vector)
 
             # 추가 판매자 특성 점수
-            seller_quality_score = self._calculate_seller_quality_score(seller)
+            seller_quality_score = calculate_seller_quality_score(seller)
 
             # 최종 판매자 점수 (가중 평균)
             final_score = 0.7 * persona_score + 0.3 * seller_quality_score
@@ -61,7 +65,7 @@ class ProductMatching:
 
             for product in seller_products:
                 # 상품 피처 점수 계산
-                product_feature_score = self._calculate_product_feature_score(
+                product_feature_score = calculate_product_feature_score(
                     product)
 
                 # 판매자 점수와 상품 점수 결합
@@ -93,69 +97,37 @@ class ProductMatching:
 
         return seller_item_scores
 
-    def _calculate_persona_score(self, user_vector: PersonaVector, seller_vector: PersonaVector) -> float:
-        """사용자와 판매자 간의 페르소나 매칭 점수 계산"""
-        score = 0.0
-        total_weight = 0.0
-
-        for key, weight in MATCHING_WEIGHTS.items():
-            if key in user_vector and key in seller_vector:
-                # 점수 계산: w_k * (1 - |u_k - s_k| / 100)
-                diff = abs(user_vector[key] - seller_vector[key])
-                match_score = weight * (1 - diff / 100)
-                score += match_score
-                total_weight += weight
-
-        return score / total_weight if total_weight > 0 else 0.0
-
-    def _calculate_seller_quality_score(self, seller: Dict[str, Any]) -> float:
-        """판매자 품질 점수 계산"""
-        # 평점 기반 점수 (0-1)
-        rating_score = min(seller["avg_rating"] / 5.0, 1.0)
-
-        # 판매량 기반 점수 (0-1)
-        sales_score = min(seller["total_sales"] / 1000.0, 1.0)
-
-        # 응답 시간 기반 점수 (0-1, 빠를수록 높음)
-        response_score = max(0, 1 - (seller["response_time_hours"] / 24.0))
-
-        # 가중 평균
-        return 0.5 * rating_score + 0.3 * sales_score + 0.2 * response_score
-
-    def _calculate_product_feature_score(self, product: Dict[str, Any]) -> float:
-        """상품 피처 점수 계산"""
-        # 조회수 기반 점수 (0-1)
-        view_score = min(product["view_count"] / 1000.0, 1.0)
-
-        # 좋아요 기반 점수 (0-1)
-        like_score = min(product["like_count"] / 100.0, 1.0)
-
-        # 상품 상태 기반 점수
-        condition_scores = {
-            "새상품": 1.0,
-            "거의새것": 0.8,
-            "중고": 0.6,
-            "사용감있음": 0.4
-        }
-        condition_score = condition_scores.get(product["condition"], 0.5)
-
-        # 가중 평균
-        return 0.4 * view_score + 0.3 * like_score + 0.3 * condition_score
-
     def get_products_for_matching(self, filters: Optional[Dict[str, Any]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """매칭을 위한 판매자와 상품 데이터 조회"""
-        # 실제 DB에서 데이터 조회 (현재는 목업 사용)
-        try:
-            sellers = self.db_service.get_sellers_with_persona(limit=50)
-            seller_ids = [s["seller_id"] for s in sellers]
-            products = self.db_service.get_products_by_sellers(
-                seller_ids, filters)
-        except Exception as e:
-            print(f"DB 조회 실패, 목업 데이터 사용: {e}")
-            sellers = self.db_service.get_mock_sellers()
-            seller_ids = [s["seller_id"] for s in sellers]
-            products = self.db_service.get_mock_products(seller_ids)
-
+        # TODO: 실제 DB 조회 구현
+        # 현재는 목업 데이터 반환
+        sellers = [
+            {
+                "seller_id": 1,
+                "seller_name": "목업 판매자",
+                "persona_vector": PersonaVector(
+                    trust_safety=50, quality_condition=50, remote_transaction=50,
+                    activity_responsiveness=50, price_flexibility=50
+                ),
+                "avg_rating": 4.5,
+                "total_sales": 100,
+                "response_time_hours": 12.0
+            }
+        ]
+        products = [
+            {
+                "product_id": 1,
+                "seller_id": 1,
+                "title": "목업 상품",
+                "price": 100000,
+                "category": "전자제품",
+                "condition": "중고",
+                "location": "서울",
+                "description": "목업 상품 설명",
+                "view_count": 100,
+                "like_count": 10
+            }
+        ]
         return sellers, products
 
 

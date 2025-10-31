@@ -10,8 +10,6 @@ from server.workflow.agents import (
     query_generator_node,
     product_matching_node,
     ranker_node,
-    router_node,
-    should_continue,
 )
 
 
@@ -31,8 +29,6 @@ def recommendation_workflow() -> StateGraph:
     workflow.add_node("query_generator", query_generator_node)
     workflow.add_node("product_matching", product_matching_node)
     workflow.add_node("ranker", ranker_node)
-    workflow.add_node("router", router_node)
-    workflow.add_node("sql_generator", lambda state: state)  # TODO: 구현
 
     # 엣지 추가
     workflow.set_entry_point("persona_classifier")
@@ -40,17 +36,9 @@ def recommendation_workflow() -> StateGraph:
     workflow.add_edge("persona_classifier", "query_generator")
     workflow.add_edge("query_generator", "product_matching")
     workflow.add_edge("product_matching", "ranker")
-    workflow.add_edge("ranker", "router")
+    workflow.add_edge("ranker", END)
 
-    # 조건부 엣지
-    workflow.add_conditional_edges(
-        "router",
-        should_continue,
-        {
-            "continue": "sql_generator",
-            "end": END
-        }
-    )
+    # SQL 생성은 필요시 ranker 노드 내에서 tool로 사용
 
     # 컴파일
     app = workflow.compile()
