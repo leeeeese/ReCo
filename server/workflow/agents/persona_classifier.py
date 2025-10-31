@@ -6,16 +6,17 @@ PersonaClassifier Agent
 
 import json
 import numpy as np
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 from pathlib import Path
 from server.workflow.state import RecommendationState, PersonaType, PersonaVector, PERSONA_PROTOTYPES
 from server.retrieval.vector_store import VectorStore
 from server.retrieval.retriever import PlaybookRetriever
 from server.utils.tools import normalize_slider_inputs, calculate_l2_distance
+from server.utils.llm_agent import create_agent
 
 
 class PersonaClassifier:
-    """페르소나 분류기"""
+    """페르소나 분류기 - LLM 기반 자율 판단"""
 
     def __init__(self, playbook_dir: str = "./server/retrieval/playbook", rules_path: str = None):
         self.playbook_dir = playbook_dir
@@ -23,7 +24,9 @@ class PersonaClassifier:
         self.rules = self._load_rules() if rules_path else {}
         self.vector_store = VectorStore()
         self.retriever = None
+        self.llm_agent = create_agent("persona_classifier")
         self._initialize_rag()
+        self._load_persona_playbooks()
 
     def _load_rules(self) -> Dict[str, Any]:
         """rules.json 로드"""
@@ -42,6 +45,22 @@ class PersonaClassifier:
             self.vector_store.initialize_from_playbook(self.playbook_dir)
 
         self.retriever = PlaybookRetriever(self.vector_store)
+
+    def _load_persona_playbooks(self) -> Dict[str, str]:
+        """플레이북에서 페르소나 정의 로드"""
+        persona_descriptions = {}
+        persona_dir = Path(self.playbook_dir) / "personas"
+
+        if persona_dir.exists():
+            for persona_file in persona_dir.glob("*.md"):
+                persona_type = persona_file.stem
+                try:
+                    with open(persona_file, 'r', encoding='utf-8') as f:
+                        persona_descriptions[persona_type] = f.read()
+                except Exception as e:
+                    print(f"페르소나 플레이북 로드 실패: {persona_file}, {e}")
+
+        return persona_descriptions
 
     # normalize_slider_inputs는 tools.py로 이동됨
 
@@ -129,16 +148,48 @@ class PersonaClassifier:
         return best_persona, best_confidence, best_reason
 
     def classify_persona(self, user_prefs: Dict[str, Any]) -> Dict[str, Any]:
-        """전체 페르소나 분류 프로세스"""
+        """LLM 기반 페르소나 분류 - 자율 판단"""
         # 1. 슬라이더 입력 정규화
         user_vector = normalize_slider_inputs(user_prefs)
 
-        # 2. RAG 분류
+        # 2. RAG 분류 (참고용)
         persona_candidates = self.rag_classification(user_vector, user_prefs)
 
-        # 3. Rules threshold 적용
-        persona_type, confidence, reason = self.apply_rules_threshold(
-            user_vector, persona_candidates)
+        # 3. LLM 기반 자율 판단
+        context = {
+            "user_preferences": user_prefs,
+            "user_vector": user_vector,
+            "persona_descriptions": self._load_persona_playbooks(),
+            "rag_candidates": persona_candidates,
+            "available_personas": [p.value for p in PersonaType]
+        }
+
+        # LLM이 10가지 페르소나 중 선택
+        decision = self.llm_agent.decide(
+            context=context,
+            decision_task="사용자의 선호도와 행동 패턴을 분석하여 가장 적합한 페르소나를 선택해주세요. "
+            "플레이북에 정의된 10가지 페르소나 중 하나를 선택하고, 선택 근거를 설명해주세요.",
+            options=[p.value for p in PersonaType],
+            format="json"
+        )
+
+        # LLM 결과 파싱
+        if decision.get("fallback"):
+            # LLM 실패 시 기존 로직 사용
+            persona_type, confidence, reason = self.apply_rules_threshold(
+                user_vector, persona_candidates)
+        else:
+            # LLM 결과 사용
+            selected_persona = decision.get(
+                "selected_persona") or decision.get("persona")
+            try:
+                persona_type = PersonaType(selected_persona)
+                confidence = decision.get("confidence", 0.7)
+                reason = decision.get("reasoning", "LLM 기반 판단")
+            except (ValueError, AttributeError):
+                # 잘못된 페르소나 타입인 경우 기존 로직 사용
+                persona_type, confidence, reason = self.apply_rules_threshold(
+                    user_vector, persona_candidates)
 
         # 4. 매칭된 프로토타입 벡터
         matched_prototype = PERSONA_PROTOTYPES[persona_type]["vector"]
@@ -149,7 +200,8 @@ class PersonaClassifier:
             "vector": user_vector,
             "matched_prototype": matched_prototype,
             "reason": reason,
-            "rag_candidates": persona_candidates
+            "rag_candidates": persona_candidates,
+            "llm_reasoning": decision.get("reasoning", "")
         }
 
 

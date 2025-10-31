@@ -1,181 +1,122 @@
 """
-Ranker(FusionRanker) Agent
-3,4단계 결과를 종합 → 최종 점수/설명
-입력: seller_item_scores → 출력: final_item_scores
+Ranker Agent
+최종 매칭된 판매자의 상품들을 랭킹
+LLM 기반으로 자율적으로 상품 랭킹 판단
 """
 
 from typing import List, Dict, Any
 from server.workflow.state import RecommendationState
-from server.utils.tools import normalize_scores, calculate_diversity_score
+from server.utils.llm_agent import create_agent
 
 
 class FusionRanker:
-    """융합 랭킹기"""
+    """융합 랭킹기 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        # TODO: ChainOfThought 구현 필요시 추가
-        pass
+        self.llm_agent = create_agent("final_matcher")  # 최종 랭킹도 같은 에이전트 활용
 
-    def fuse_scores(self, seller_item_scores: List[Dict[str, Any]],
-                    persona_classification: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """3,4단계 결과를 융합하여 최종 점수 생성"""
-        if not seller_item_scores:
+    def rank_products(self,
+                      final_seller_recommendations: List[Dict[str, Any]],
+                      user_input: Dict[str, Any],
+                      persona_classification: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        LLM 기반으로 상품 랭킹
+
+        Args:
+            final_seller_recommendations: 최종 매칭된 판매자 추천 결과
+            user_input: 사용자 입력
+            persona_classification: 페르소나 분류 결과
+
+        Returns:
+            랭킹된 상품 리스트
+        """
+        if not final_seller_recommendations:
             return []
 
-        # 1. 기본 점수 정규화
-        normalized_scores = self._normalize_scores(seller_item_scores)
+        # 각 판매자의 상품 정보 수집
+        all_products = []
+        for seller in final_seller_recommendations:
+            seller_id = seller.get("seller_id")
+            seller_name = seller.get("seller_name")
+            products = seller.get("products", [])
 
-        # 2. 페르소나 가중치 적용
-        persona_weighted_scores = self._apply_persona_weights(
-            normalized_scores, persona_classification)
+            for product in products:
+                all_products.append({
+                    **product,
+                    "seller_id": seller_id,
+                    "seller_name": seller_name,
+                    "seller_price_score": seller.get("price_score", 0),
+                    "seller_safety_score": seller.get("safety_score", 0),
+                    "seller_persona_score": seller.get("persona_score", 0),
+                    "seller_final_score": seller.get("final_score", 0)
+                })
 
-        # 3. 다양성 보너스 적용
-        diversity_adjusted_scores = self._apply_diversity_bonus(
-            persona_weighted_scores)
-
-        # 4. 최종 점수 계산
-        final_scores = self._calculate_final_scores(diversity_adjusted_scores)
-
-        return final_scores
-
-    def _normalize_scores(self, seller_item_scores: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """점수들을 0-1 범위로 정규화"""
-        if not seller_item_scores:
+        if not all_products:
             return []
 
-        # 각 점수 유형별로 최대값, 최소값 계산
-        persona_scores = [item['seller_persona_score']
-                          for item in seller_item_scores]
-        quality_scores = [item['seller_quality_score']
-                          for item in seller_item_scores]
-        feature_scores = [item['product_feature_score']
-                          for item in seller_item_scores]
+        # LLM에게 랭킹 요청
+        # 판매자 점수 정보를 리스트로 구성
+        seller_scores_list = [
+            {
+                "seller_id": seller.get("seller_id"),
+                "seller_name": seller.get("seller_name"),
+                "price": seller.get("price_score", 0),
+                "safety": seller.get("safety_score", 0),
+                "persona": seller.get("persona_score", 0),
+                "final": seller.get("final_score", 0)
+            }
+            for seller in final_seller_recommendations[:10]
+        ]
 
-        # tools의 normalize_scores 사용
-        norm_persona = normalize_scores(persona_scores)
-        norm_quality = normalize_scores(quality_scores)
-        norm_feature = normalize_scores(feature_scores)
-
-        # 정규화된 점수 적용
-        normalized_items = []
-        for i, item in enumerate(seller_item_scores):
-            normalized_item = item.copy()
-            normalized_item['norm_persona_score'] = norm_persona[i]
-            normalized_item['norm_quality_score'] = norm_quality[i]
-            normalized_item['norm_feature_score'] = norm_feature[i]
-            normalized_items.append(normalized_item)
-
-        return normalized_items
-
-    def _apply_persona_weights(self, normalized_scores: List[Dict[str, Any]],
-                               persona_classification: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """페르소나에 따른 가중치 적용"""
-        persona_type = persona_classification.get(
-            "persona_type", "hybrid_trade")
-        confidence = persona_classification.get("confidence", 0.5)
-
-        # 페르소나별 가중치 설정
-        persona_weights = {
-            "trust_safety_pro": {"persona": 0.6, "quality": 0.3, "feature": 0.1},
-            "high_quality_new": {"persona": 0.4, "quality": 0.4, "feature": 0.2},
-            "fast_shipping_online": {"persona": 0.5, "quality": 0.3, "feature": 0.2},
-            "local_offline": {"persona": 0.6, "quality": 0.2, "feature": 0.2},
-            "negotiation_friendly": {"persona": 0.5, "quality": 0.2, "feature": 0.3},
-            "power_seller": {"persona": 0.4, "quality": 0.4, "feature": 0.2},
-            "responsive_kind": {"persona": 0.5, "quality": 0.3, "feature": 0.2},
-            "niche_specialist": {"persona": 0.4, "quality": 0.3, "feature": 0.3},
-            "balanced_low_activity": {"persona": 0.4, "quality": 0.3, "feature": 0.3},
-            "hybrid_trade": {"persona": 0.4, "quality": 0.3, "feature": 0.3}
+        context = {
+            "user_input": user_input,
+            "persona_type": str(persona_classification.get("persona_type", "")),
+            "products": all_products[:50],  # 상위 50개만 분석 (토큰 절약)
+            "final_seller_scores": seller_scores_list
         }
 
-        weights = persona_weights.get(
-            persona_type, {"persona": 0.4, "quality": 0.3, "feature": 0.3})
+        decision = self.llm_agent.decide(
+            context=context,
+            decision_task="최종 매칭된 판매자들의 상품들을 사용자에게 가장 적합한 순서로 랭킹해주세요. "
+            "판매자의 가격/안전/페르소나 점수와 상품의 특성을 종합적으로 고려하여 판단하세요.",
+            format="json"
+        )
 
-        # 신뢰도에 따른 가중치 조정
-        confidence_factor = 0.5 + (confidence * 0.5)  # 0.5 ~ 1.0
-        weights = {k: v * confidence_factor for k, v in weights.items()}
+        # LLM 결과 파싱 및 적용
+        ranked_product_ids = decision.get("ranked_product_ids", [])
+        if not ranked_product_ids and decision.get("fallback"):
+            # LLM 실패 시 판매자 점수 기반 정렬
+            all_products.sort(
+                key=lambda x: x["seller_final_score"], reverse=True)
+            return all_products
 
-        # 가중치 적용
-        weighted_items = []
-        for item in normalized_scores:
-            weighted_item = item.copy()
-            weighted_score = (
-                weights["persona"] * item['norm_persona_score'] +
-                weights["quality"] * item['norm_quality_score'] +
-                weights["feature"] * item['norm_feature_score']
-            )
-            weighted_item['weighted_score'] = weighted_score
-            weighted_item['persona_weights'] = weights
-            weighted_items.append(weighted_item)
+        # LLM이 제시한 순서대로 재정렬
+        ranked_products = []
+        for product_id in ranked_product_ids:
+            product = next((p for p in all_products if p.get(
+                "product_id") == product_id), None)
+            if product:
+                ranked_products.append(product)
 
-        return weighted_items
+        # 랭킹되지 않은 상품들 추가
+        ranked_ids = {p.get("product_id") for p in ranked_products}
+        for product in all_products:
+            if product.get("product_id") not in ranked_ids:
+                ranked_products.append(product)
 
-    def _apply_diversity_bonus(self, weighted_scores: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """다양성 보너스 적용 (카테고리, 판매자 다양성)"""
-        if len(weighted_scores) <= 1:
-            return weighted_scores
-
-        # 다양성 계산 (tools 사용)
-        category_diversity = calculate_diversity_score(
-            weighted_scores, 'category')
-        seller_diversity = calculate_diversity_score(
-            weighted_scores, 'seller_id')
-
-        # 다양성 보너스 적용
-        diversity_bonus = 0.1 * (category_diversity + seller_diversity) / 2
-
-        diversity_items = []
-        for i, item in enumerate(weighted_scores):
-            diversity_item = item.copy()
-            # 순위가 낮을수록 더 많은 보너스 (다양성 촉진)
-            rank_bonus = diversity_bonus * (1 - i / len(weighted_scores))
-            diversity_item['diversity_bonus'] = rank_bonus
-            diversity_item['diversity_score'] = item['weighted_score'] + rank_bonus
-            diversity_items.append(diversity_item)
-
-        return diversity_items
-
-    def _calculate_final_scores(self, diversity_scores: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """최종 점수 계산 및 정렬"""
-        final_items = []
-
-        for item in diversity_scores:
-            final_item = item.copy()
-            final_item['final_score'] = item['diversity_score']
-
-            # 추가 메타데이터
-            final_item['ranking_factors'] = {
-                'persona_match': item['norm_persona_score'],
-                'seller_quality': item['norm_quality_score'],
-                'product_features': item['norm_feature_score'],
-                'diversity_bonus': item['diversity_bonus'],
-                'persona_weights': item['persona_weights']
-            }
-
-            final_items.append(final_item)
-
-        # 최종 점수 순으로 정렬
-        final_items.sort(key=lambda x: x['final_score'], reverse=True)
-
-        return final_items
-
-    def generate_explanation(self, final_scores: List[Dict[str, Any]],
-                             persona_classification: Dict[str, Any]) -> str:
-        """추천 근거 설명 생성"""
-        # TODO: ChainOfThought 구현 필요시 상세 설명 생성
-        if not final_scores:
-            return "추천 결과가 없습니다."
-        return f"{len(final_scores)}개 상품이 추천되었습니다."
+        return ranked_products
 
 
 def ranker_node(state: RecommendationState) -> RecommendationState:
-    """랭킹 노드"""
+    """랭킹 노드 - LLM 기반 자율 판단"""
     try:
-        seller_item_scores = state.get("seller_item_scores")
+        final_seller_recommendations = state.get(
+            "final_seller_recommendations")
+        user_input = state.get("user_input")
         persona_classification = state.get("persona_classification")
 
-        if not seller_item_scores:
-            raise ValueError("매칭된 상품이 없습니다.")
+        if not final_seller_recommendations:
+            raise ValueError("최종 매칭된 판매자가 없습니다.")
 
         if not persona_classification:
             raise ValueError("페르소나 분류가 완료되지 않았습니다.")
@@ -183,30 +124,26 @@ def ranker_node(state: RecommendationState) -> RecommendationState:
         # FusionRanker 인스턴스 생성
         ranker = FusionRanker()
 
-        # 3,4단계 결과 융합
-        final_item_scores = ranker.fuse_scores(
-            seller_item_scores, persona_classification)
-
-        # 추천 근거 설명 생성
-        explanation = ranker.generate_explanation(
-            final_item_scores, persona_classification)
+        # LLM 기반 상품 랭킹
+        ranked_products = ranker.rank_products(
+            final_seller_recommendations,
+            user_input,
+            persona_classification
+        )
 
         # 결과를 상태에 저장
-        state["final_item_scores"] = final_item_scores
-        state["ranking_explanation"] = explanation or ""
+        state["final_item_scores"] = ranked_products
+        state["ranking_explanation"] = "LLM 기반 자율 판단으로 상품 랭킹 완료"
         state["current_step"] = "products_ranked"
         state["completed_steps"].append("ranking")
 
-        print(f"상품 랭킹 완료: {len(final_item_scores)}개 상품")
-        print(f"추천 근거:")
-        print(explanation)
+        print(f"상품 랭킹 완료: {len(ranked_products)}개 상품")
+        print(f"LLM 기반 자율 판단으로 랭킹 완료")
 
         # 상위 5개 결과 출력
-        for i, item in enumerate(final_item_scores[:5], 1):
-            print(f"  {i}. {item['title']} (최종점수: {item['final_score']:.3f})")
-            print(f"     페르소나: {item['ranking_factors']['persona_match']:.3f}, "
-                  f"품질: {item['ranking_factors']['seller_quality']:.3f}, "
-                  f"피처: {item['ranking_factors']['product_features']:.3f}")
+        for i, item in enumerate(ranked_products[:5], 1):
+            print(
+                f"  {i}. {item.get('title', 'N/A')} (판매자: {item.get('seller_name', 'N/A')})")
 
     except Exception as e:
         state["error_message"] = f"상품 랭킹 중 오류: {str(e)}"
