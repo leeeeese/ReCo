@@ -7,6 +7,7 @@ LLM 기반으로 거래 방식, 결제 안전도, 판매자 신뢰도를 종합�
 from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
+from server.utils.mock_data import get_mock_sellers_with_products
 
 
 class SafetyAgent:
@@ -89,8 +90,11 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
         # 안전거래 에이전트 실행
         agent = SafetyAgent()
 
-        # TODO: 실제 판매자 데이터 조회
-        sellers_with_products = []  # placeholder
+        # 데이터 조회: state에 있으면 사용, 없으면 목업 데이터 사용
+        sellers_with_products = state.get("mock_sellers_with_products")
+        if not sellers_with_products:
+            sellers_with_products = get_mock_sellers_with_products()
+            # TODO: 실제 구현시에는 DB나 검색 서비스에서 가져옴
 
         # 안전거래 관점에서 판매자 추천
         safety_recommendations = agent.recommend_sellers_by_safety(

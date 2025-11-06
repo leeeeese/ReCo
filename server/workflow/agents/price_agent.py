@@ -8,6 +8,7 @@ from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
 from server.workflow.agents.price_updater import PriceUpdater, joongna_search_prices
+from server.utils.mock_data import get_mock_sellers_with_products
 
 
 class PriceAgent:
@@ -128,9 +129,11 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
         # 가격 에이전트 실행
         agent = PriceAgent()
 
-        # TODO: 실제 상품 데이터 조회 (현재는 목업)
-        # 실제 구현시에는 DB나 검색 서비스에서 가져옴
-        sellers_with_products = []  # placeholder
+        # 데이터 조회: state에 있으면 사용, 없으면 목업 데이터 사용
+        sellers_with_products = state.get("mock_sellers_with_products")
+        if not sellers_with_products:
+            sellers_with_products = get_mock_sellers_with_products()
+            # TODO: 실제 구현시에는 DB나 검색 서비스에서 가져옴
 
         # 가격 관점에서 판매자 추천
         price_recommendations = agent.recommend_sellers_by_price(

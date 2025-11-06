@@ -157,6 +157,8 @@ def get_mock_state() -> Dict[str, Any]:
         "user_input": get_mock_user_input(),
         "search_query": get_mock_search_query(),
         "persona_classification": get_mock_persona_classification(),
+        "mock_sellers_with_products": get_mock_sellers_with_products(),
+        "mock_sellers_with_persona": get_mock_sellers_with_persona(),
         "price_agent_recommendations": None,
         "safety_agent_recommendations": None,
         "persona_matching_recommendations": None,
