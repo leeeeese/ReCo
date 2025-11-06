@@ -5,7 +5,17 @@ ReCo Streamlit UI
 
 import streamlit as st
 import requests
+import os
+from pathlib import Path
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+# 프로젝트 루트의 .env 파일 로드
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+# API 서버 URL (환경 변수에서 가져오거나 기본값 사용)
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 # 페이지 설정
 st.set_page_config(
@@ -117,11 +127,21 @@ def main():
                     "price_max": price_max if price_max < 10000000 else None,
                 }
 
-                # TODO: 실제 API 호출
-                # response = requests.post("http://localhost:8000/api/v1/recommend", json=payload)
-
-                st.success("추천 시스템 준비 중입니다!")
-                st.json(payload)
+                # API 호출
+                try:
+                    response = requests.post(
+                        f"{API_BASE_URL}/api/v1/recommend",
+                        json=payload,
+                        timeout=30
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    st.success("추천 완료!")
+                    st.json(result)
+                except requests.exceptions.RequestException as e:
+                    st.error(f"API 호출 실패: {str(e)}")
+                    st.info(f"API 서버 URL: {API_BASE_URL}")
+                    st.json(payload)  # 디버깅용
 
             except Exception as e:
                 st.error(f"오류 발생: {str(e)}")
