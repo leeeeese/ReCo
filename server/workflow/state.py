@@ -69,6 +69,10 @@ class RecommendationState(TypedDict):
     search_query: Optional[Dict[str, Any]]
     persona_classification: Optional[Dict[str, Any]]
 
+    # 목업 데이터 (테스트용)
+    mock_sellers_with_products: Optional[List[Dict[str, Any]]]
+    mock_sellers_with_persona: Optional[List[Dict[str, Any]]]
+
     # 서브에이전트 결과
     price_agent_recommendations: Optional[Dict[str, Any]]
     safety_agent_recommendations: Optional[Dict[str, Any]]
