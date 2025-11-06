@@ -38,3 +38,7 @@ class Database:
     def create_tables(self):
         """테이블 생성"""
         Base.metadata.create_all(bind=self.engine)
+
+
+# 전역 데이터베이스 인스턴스
+database = Database()
