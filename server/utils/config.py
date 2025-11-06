@@ -5,6 +5,7 @@
 
 import os
 from pathlib import Path
+from typing import Dict, Any
 from dotenv import load_dotenv
 
 # .env 파일 로드
@@ -47,7 +48,6 @@ def validate_config() -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    from typing import Dict, Any
     print("=== ReCo 설정 검증 ===")
     status = validate_config()
     for key, value in status.items():
