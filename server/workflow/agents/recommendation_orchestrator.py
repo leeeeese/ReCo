@@ -45,15 +45,6 @@ class RecommendationOrchestrator:
                                    safety_results: Dict[str, Any],
                                    persona_results: Dict[str, Any]) -> List[Dict[str, Any]]:
         """3개 서브에이전트 결과 종합"""
-        context = {
-            "price_agent_recommendations": price_results.get("recommended_sellers", []),
-            "price_reasoning": price_results.get("reasoning", ""),
-            "safety_agent_recommendations": safety_results.get("recommended_sellers", []),
-            "safety_reasoning": safety_results.get("reasoning", ""),
-            "persona_agent_recommendations": persona_results.get("recommended_sellers", []),
-            "persona_reasoning": persona_results.get("reasoning", "")
-        }
-
         decision = self.llm_agent.analyze_and_combine(
             sub_agent_results=[
                 {"agent": "price", "results": price_results},
@@ -64,50 +55,43 @@ class RecommendationOrchestrator:
             "각 에이전트의 추천 이유와 점수를 종합적으로 고려하여 판단하세요."
         )
 
-        # 최종 추천 결과 구성
-        final_recommendations = []
-        recommended_seller_ids = decision.get(
-            "final_recommendations", {}).get("seller_ids", [])
-
         # 각 서브에이전트 결과를 병합
         all_sellers = {}
-        for seller in price_results.get("recommended_sellers", []):
-            seller_id = seller.get("seller_id")
-            if seller_id not in all_sellers:
-                all_sellers[seller_id] = {
-                    "seller_id": seller_id, "seller_name": seller.get("seller_name")}
-            all_sellers[seller_id]["price_score"] = seller.get(
-                "price_score", 0)
-            all_sellers[seller_id]["price_reasoning"] = seller.get(
-                "price_reasoning", "")
 
-        for seller in safety_results.get("recommended_sellers", []):
-            seller_id = seller.get("seller_id")
-            if seller_id not in all_sellers:
-                all_sellers[seller_id] = {
-                    "seller_id": seller_id, "seller_name": seller.get("seller_name")}
-            all_sellers[seller_id]["safety_score"] = seller.get(
-                "safety_score", 0)
-            all_sellers[seller_id]["safety_reasoning"] = seller.get(
-                "safety_reasoning", "")
+        # 가격 에이전트 결과 병합
+        self._merge_seller_results(
+            all_sellers,
+            price_results.get("recommended_sellers", []),
+            "price_score", "price_reasoning", "price_score"
+        )
 
-        for seller in persona_results.get("recommended_sellers", []):
-            seller_id = seller.get("seller_id")
-            if seller_id not in all_sellers:
-                all_sellers[seller_id] = {
-                    "seller_id": seller_id, "seller_name": seller.get("seller_name")}
-            all_sellers[seller_id]["persona_score"] = seller.get(
-                "persona_match_score", 0)
-            all_sellers[seller_id]["persona_reasoning"] = seller.get(
-                "persona_reasoning", "")
-            all_sellers[seller_id]["products"] = seller.get("products", [])
+        # 안전거래 에이전트 결과 병합
+        self._merge_seller_results(
+            all_sellers,
+            safety_results.get("recommended_sellers", []),
+            "safety_score", "safety_reasoning", "safety_score"
+        )
+
+        # 페르소나 에이전트 결과 병합
+        self._merge_seller_results(
+            all_sellers,
+            persona_results.get("recommended_sellers", []),
+            "persona_score", "persona_reasoning", "persona_match_score",
+            include_products=True
+        )
 
         # LLM 종합 점수 적용
+        final_recommendations_data = decision.get("final_recommendations", {})
+        recommended_seller_ids = final_recommendations_data.get(
+            "seller_ids", [])
+        scores_data = final_recommendations_data.get("scores", {})
+        final_recommendations = []
+
         for seller_id in recommended_seller_ids:
-            if str(seller_id) in all_sellers:
-                seller = all_sellers[str(seller_id)]
-                final_score_data = decision.get("final_recommendations", {}).get(
-                    "scores", {}).get(str(seller_id), {})
+            seller_id_str = str(seller_id)
+            if seller_id_str in all_sellers:
+                seller = all_sellers[seller_id_str]
+                final_score_data = scores_data.get(seller_id_str, {})
 
                 final_recommendations.append({
                     "seller_id": seller["seller_id"],
@@ -124,6 +108,27 @@ class RecommendationOrchestrator:
         final_recommendations.sort(
             key=lambda x: x["final_score"], reverse=True)
         return final_recommendations
+
+    def _merge_seller_results(self,
+                              all_sellers: Dict[str, Any],
+                              sellers: List[Dict[str, Any]],
+                              score_key: str,
+                              reasoning_key: str,
+                              source_score_key: str,
+                              include_products: bool = False) -> None:
+        """서브에이전트 결과를 all_sellers에 병합하는 공통 로직"""
+        for seller in sellers:
+            seller_id = str(seller.get("seller_id"))
+            if seller_id not in all_sellers:
+                all_sellers[seller_id] = {
+                    "seller_id": seller_id,
+                    "seller_name": seller.get("seller_name")
+                }
+            all_sellers[seller_id][score_key] = seller.get(source_score_key, 0)
+            all_sellers[seller_id][reasoning_key] = seller.get(
+                reasoning_key, "")
+            if include_products:
+                all_sellers[seller_id]["products"] = seller.get("products", [])
 
     def _rank_products(self,
                        final_sellers: List[Dict[str, Any]],
@@ -188,18 +193,22 @@ class RecommendationOrchestrator:
                 key=lambda x: x["seller_final_score"], reverse=True)
             return all_products
 
+        # 상품을 product_id로 인덱싱하여 빠른 조회
+        products_by_id = {p.get("product_id"): p for p in all_products}
+
         # LLM이 제시한 순서대로 재정렬
         ranked_products = []
+        ranked_ids = set()
         for product_id in ranked_product_ids:
-            product = next((p for p in all_products if p.get(
-                "product_id") == product_id), None)
+            product = products_by_id.get(product_id)
             if product:
                 ranked_products.append(product)
+                ranked_ids.add(product_id)
 
         # 랭킹되지 않은 상품들 추가
-        ranked_ids = {p.get("product_id") for p in ranked_products}
         for product in all_products:
-            if product.get("product_id") not in ranked_ids:
+            product_id = product.get("product_id")
+            if product_id not in ranked_ids:
                 ranked_products.append(product)
 
         return ranked_products
