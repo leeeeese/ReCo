@@ -46,3 +46,9 @@ Thumbs.db
 
 # 체크포인트
 checkpoints/
+
+# CSV 데이터 파일
+*.csv
+item_detail_data.csv
+seller_data.csv
+review_data.csv
