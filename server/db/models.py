@@ -63,3 +63,17 @@ class Seller(Base):
     total_sales = Column(Integer, default=0)  # 총 판매 건수
     response_time_hours = Column(Float, default=24.0)  # 응답 시간
     persona_vector = Column(JSON)  # 판매자 페르소나 벡터
+
+
+class Review(Base):
+    """판매자 리뷰 정보"""
+
+    __tablename__ = "reviews"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    reviewer_id = Column(String, index=True)  # 리뷰어 ID
+    review_role = Column(String)  # 리뷰 역할 (구매자 등)
+    review_content = Column(Text)  # 리뷰 내용
+    seller_id = Column(Integer, index=True)  # 판매자 ID
+    seller_name = Column(String)  # 판매자 이름 (참조용)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
