@@ -4,7 +4,6 @@
 """
 
 from typing import List, Dict, Any
-from server.workflow.state import PersonaType, PersonaVector
 
 
 def get_mock_user_input() -> Dict[str, Any]:
@@ -24,6 +23,7 @@ def get_mock_user_input() -> Dict[str, Any]:
 
 
 def get_mock_sellers_with_products() -> List[Dict[str, Any]]:
+    from server.workflow.state import PersonaVector
     """판매자 + 상품 목업 데이터"""
     sellers = []
 
@@ -69,6 +69,7 @@ def get_mock_sellers_with_products() -> List[Dict[str, Any]]:
 
 
 def get_mock_sellers_with_persona() -> List[Dict[str, Any]]:
+    from server.workflow.state import PersonaType, PersonaVector
     """페르소나 매칭용 판매자 목업 데이터"""
     sellers = []
 
@@ -117,6 +118,7 @@ def get_mock_sellers_with_persona() -> List[Dict[str, Any]]:
 
 
 def get_mock_persona_classification() -> Dict[str, Any]:
+    from server.workflow.state import PersonaType, PersonaVector
     """페르소나 분류 결과 목업 데이터"""
     from server.workflow.state import PERSONA_PROTOTYPES
 

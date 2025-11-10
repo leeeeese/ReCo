@@ -4,13 +4,7 @@ persona_classifier, query_generator 등의 간단한 작업을 수행
 """
 
 from typing import Dict, Any
-from server.workflow.state import RecommendationState, PersonaType, PersonaVector, PERSONA_PROTOTYPES
-from server.utils.tools import (
-    normalize_slider_inputs,
-    extract_keywords,
-    enhance_query_for_persona,
-    create_filters
-)
+
 from server.utils.llm_agent import create_agent
 from server.retrieval.vector_store import VectorStore
 from server.retrieval.retriever import PlaybookRetriever
@@ -19,6 +13,13 @@ import json
 
 
 def classify_persona(user_input: Dict[str, Any]) -> Dict[str, Any]:
+    from server.utils.common_utils import (
+    normalize_slider_inputs,
+    extract_keywords,
+    enhance_query_for_persona,
+    create_filters
+)
+    from server.workflow.state import PersonaVector, PersonaType,PERSONA_PROTOTYPES
     """페르소나 분류"""
     # LLM 기반 페르소나 분류
     llm_agent = create_agent("persona_classifier")
@@ -94,6 +95,8 @@ def classify_persona(user_input: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def generate_search_query(user_input: Dict[str, Any], persona_classification: Dict[str, Any]) -> Dict[str, Any]:
+    from server.utils.common_utils import enhance_query_for_persona 
+    from server.workflow.state import PersonaType
     """검색 쿼리 생성"""
     original_query = user_input.get("search_query", "")
     persona_type = persona_classification.get("persona_type")
