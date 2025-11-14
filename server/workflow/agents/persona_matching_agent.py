@@ -5,9 +5,9 @@ LLM 기반으로 사용자와 판매자의 페르소나를 비교하여
 """
 
 from typing import Dict, Any, List
-from server.workflow.state import RecommendationState
+from server.workflow.state import RecommendationState, PersonaVector
 from server.utils.llm_agent import create_agent
-from server.utils.mock_data import get_mock_sellers_with_persona
+from server.db.persona_service import get_sellers_with_persona
 
 
 class PersonaMatchingAgent:
@@ -90,11 +90,17 @@ def persona_matching_agent_node(state: RecommendationState) -> RecommendationSta
         # 페르소나 매칭 에이전트 실행
         agent = PersonaMatchingAgent()
 
-        # 데이터 조회: state에 있으면 사용, 없으면 목업 데이터 사용
-        sellers_with_persona = state.get("mock_sellers_with_persona")
-        if not sellers_with_persona:
-            sellers_with_persona = get_mock_sellers_with_persona()
-            # TODO: 실제 구현시에는 DB나 검색 서비스에서 가져옴
+        # DB에서 조회
+        try:
+            sellers_with_persona = get_sellers_with_persona(
+                limit=50, min_reviews=1)
+
+            if not sellers_with_persona:
+                raise ValueError("DB에서 판매자 데이터를 찾을 수 없습니다.")
+
+            print(f"DB에서 {len(sellers_with_persona)}개 판매자 조회 완료 (페르소나 계산됨)")
+        except Exception as e:
+            raise ValueError(f"페르소나 매칭 에이전트 데이터 조회 실패: {e}")
 
         # 페르소나 관점에서 판매자 추천
         persona_recommendations = agent.recommend_sellers_by_persona(

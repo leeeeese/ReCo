@@ -52,3 +52,8 @@ checkpoints/
 item_detail_data.csv
 seller_data.csv
 review_data.csv
+
+# 데이터베이스 파일
+*.db
+history.db
+server/history.db

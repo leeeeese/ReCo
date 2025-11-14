@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from tqdm import tqdm
 from server.db.database import SessionLocal, engine
-from server.db.models import Product, Seller, Base
+from server.db.models import Product, Seller, Review, Base
 
 
 def create_tables():
@@ -222,18 +222,101 @@ def migrate_sellers(csv_path: str, clear_existing: bool = False):
         db.close()
 
 
+def migrate_reviews(csv_path: str, clear_existing: bool = False):
+    """
+    review_data.csv를 DB로 마이그레이션
+
+    Args:
+        csv_path: CSV 파일 경로
+        clear_existing: 기존 데이터 삭제 여부
+    """
+    print(f"\nreview_data.csv 파일 읽기 중...")
+
+    # CSV 파일 읽기
+    try:
+        df = pd.read_csv(csv_path, encoding='utf-8')
+    except UnicodeDecodeError:
+        try:
+            df = pd.read_csv(csv_path, encoding='cp949')
+        except:
+            df = pd.read_csv(csv_path, encoding='euc-kr')
+
+    print(f"총 {len(df)}개 행 읽기 완료")
+
+    # seller_code 정리 (BOM 제거)
+    df.columns = [col.replace('\ufeff', '') for col in df.columns]
+    if 'seller_code' in df.columns:
+        df['seller_code'] = df['seller_code'].apply(clean_seller_code)
+
+    # DB 연결
+    db: Session = SessionLocal()
+
+    try:
+        # 기존 데이터 삭제 (선택사항)
+        if clear_existing:
+            print("기존 리뷰 데이터 삭제 중...")
+            db.query(Review).delete()
+            db.commit()
+            print("기존 데이터 삭제 완료")
+
+        # 리뷰 데이터 삽입
+        print("리뷰 데이터 삽입 중...")
+
+        for _, row in tqdm(df.iterrows(), total=len(df), desc="리뷰 삽입 진행"):
+            try:
+                seller_id = int(row['seller_code']) if pd.notna(
+                    row['seller_code']) else None
+
+                if not seller_id:
+                    continue
+
+                review_data = {
+                    'reviewer_id': str(row['reviewer_id']) if pd.notna(row['reviewer_id']) else '',
+                    'review_role': str(row['review_role']) if pd.notna(row['review_role']) else '',
+                    'review_content': str(row['review_content']) if pd.notna(row['review_content']) else '',
+                    'seller_id': seller_id,
+                    'seller_name': str(row['seller_name']) if pd.notna(row['seller_name']) else '',
+                }
+
+                # 신규 삽입 (리뷰는 중복 가능하므로 항상 추가)
+                review = Review(**review_data)
+                db.add(review)
+
+            except Exception as e:
+                print(f"리뷰 처리 오류: {e}")
+                continue
+
+        db.commit()
+
+        # 통계 출력
+        total_reviews = db.query(Review).count()
+        print(f"\n리뷰 데이터 마이그레이션 완료: {total_reviews}개")
+
+    except Exception as e:
+        db.rollback()
+        print(f"오류 발생: {e}")
+        raise
+    finally:
+        db.close()
+
+
 def migrate_all(csv_dir: str = ".", clear_existing: bool = False):
     """
     모든 CSV 파일을 DB로 마이그레이션
 
     Args:
         csv_dir: CSV 파일이 있는 디렉토리
-        clear_existing: 기존 데이터 삭제 여부
+        clear_existing: 기존 데이터 삭제 여부 (테이블도 재생성)
     """
     csv_dir_path = Path(csv_dir)
 
     item_csv = csv_dir_path / "item_detail_data.csv"
     seller_csv = csv_dir_path / "seller_data.csv"
+    review_csv = csv_dir_path / "review_data.csv"
+
+    # clear_existing이면 기존 테이블 삭제
+    if clear_existing:
+        Base.metadata.drop_all(bind=engine)
 
     # 테이블 생성
     create_tables()
@@ -249,6 +332,12 @@ def migrate_all(csv_dir: str = ".", clear_existing: bool = False):
         migrate_item_details(str(item_csv), clear_existing=clear_existing)
     else:
         print(f"경고: {item_csv} 파일을 찾을 수 없습니다.")
+
+    # 리뷰 마이그레이션 (판매자 이후)
+    if review_csv.exists():
+        migrate_reviews(str(review_csv), clear_existing=clear_existing)
+    else:
+        print(f"경고: {review_csv} 파일을 찾을 수 없습니다.")
 
     print("\n모든 마이그레이션 완료!")
 

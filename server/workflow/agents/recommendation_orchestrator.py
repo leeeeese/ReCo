@@ -7,6 +7,7 @@
 from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
+from server.workflow.prompts import load_prompt
 
 
 class RecommendationOrchestrator:
@@ -14,6 +15,10 @@ class RecommendationOrchestrator:
 
     def __init__(self):
         self.llm_agent = create_agent("final_matcher")
+        # 프롬프트 로드
+        self.combine_sellers_prompt = load_prompt(
+            "orchestrator_combine_sellers")
+        self.rank_products_prompt = load_prompt("orchestrator_rank_products")
 
     def combine_and_rank(self,
                          price_results: Dict[str, Any],
@@ -51,8 +56,7 @@ class RecommendationOrchestrator:
                 {"agent": "safety", "results": safety_results},
                 {"agent": "persona", "results": persona_results}
             ],
-            combination_task="3개 서브에이전트의 판단을 종합하여 사용자에게 가장 적합한 판매자를 최종 추천해주세요. "
-            "각 에이전트의 추천 이유와 점수를 종합적으로 고려하여 판단하세요."
+            combination_task=self.combine_sellers_prompt
         )
 
         # 각 서브에이전트 결과를 병합
@@ -181,8 +185,7 @@ class RecommendationOrchestrator:
 
         decision = self.llm_agent.decide(
             context=context,
-            decision_task="최종 매칭된 판매자들의 상품들을 사용자에게 가장 적합한 순서로 랭킹해주세요. "
-            "판매자의 가격/안전/페르소나 점수와 상품의 특성을 종합적으로 고려하여 판단하세요.",
+            decision_task=self.rank_products_prompt,
             format="json"
         )
 
