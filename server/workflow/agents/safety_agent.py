@@ -7,7 +7,6 @@ LLM 기반으로 거래 방식, 결제 안전도, 판매자 신뢰도를 종합�
 from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
-from server.utils.mock_data import get_mock_sellers_with_products
 
 
 class SafetyAgent:
@@ -90,11 +89,46 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
         # 안전거래 에이전트 실행
         agent = SafetyAgent()
 
-        # 데이터 조회: state에 있으면 사용, 없으면 목업 데이터 사용
-        sellers_with_products = state.get("mock_sellers_with_products")
-        if not sellers_with_products:
-            sellers_with_products = get_mock_sellers_with_products()
-            # TODO: 실제 구현시에는 DB나 검색 서비스에서 가져옴
+        # DB에서 조회 (price_agent와 동일한 로직)
+        from server.db.product_service import get_sellers_with_products, search_products_by_keywords
+
+        search_query = state.get("search_query", {})
+
+        try:
+            # 검색 쿼리 파싱
+            search_query_obj = search_query.get(
+                "original_query") or search_query.get("enhanced_query", "")
+            keywords = search_query.get("keywords", [])
+
+            # 사용자 입력에서 필터 추출
+            category = user_input.get("category")
+            price_min = user_input.get("price_min")
+            price_max = user_input.get("price_max")
+
+            # DB에서 조회
+            if keywords:
+                sellers_with_products = search_products_by_keywords(
+                    keywords=keywords,
+                    category=category,
+                    price_min=price_min,
+                    price_max=price_max,
+                    limit=50
+                )
+            else:
+                sellers_with_products = get_sellers_with_products(
+                    search_query=search_query_obj if search_query_obj else None,
+                    category=category,
+                    price_min=price_min,
+                    price_max=price_max,
+                    limit=50
+                )
+
+            if not sellers_with_products:
+                raise ValueError("DB에서 상품 데이터를 찾을 수 없습니다.")
+
+            print(f"DB에서 {len(sellers_with_products)}개 판매자 조회 완료 (안전거래 분석용)")
+        except Exception as e:
+            raise ValueError(f"안전거래 에이전트 데이터 조회 실패: {e}")
 
         # 안전거래 관점에서 판매자 추천
         safety_recommendations = agent.recommend_sellers_by_safety(

@@ -65,13 +65,10 @@ MATCHING_WEIGHTS = {
 
 class RecommendationState(TypedDict):
     """추천 워크플로우 상태"""
+    # 입력 데이터
     user_input: Dict[str, Any]
     search_query: Optional[Dict[str, Any]]
     persona_classification: Optional[Dict[str, Any]]
-
-    # 목업 데이터 (테스트용)
-    mock_sellers_with_products: Optional[List[Dict[str, Any]]]
-    mock_sellers_with_persona: Optional[List[Dict[str, Any]]]
 
     # 서브에이전트 결과
     price_agent_recommendations: Optional[Dict[str, Any]]
@@ -80,9 +77,7 @@ class RecommendationState(TypedDict):
 
     # 최종 결과
     final_seller_recommendations: Optional[List[Dict[str, Any]]]
-    seller_item_scores: Optional[List[Dict[str, Any]]]
     final_item_scores: Optional[List[Dict[str, Any]]]
-    sql_query: Optional[Dict[str, Any]]
     ranking_explanation: Optional[str]
 
     # 워크플로우 상태
