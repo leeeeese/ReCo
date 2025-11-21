@@ -7,7 +7,7 @@ from server.workflow.state import RecommendationState
 from server.workflow.agents import (
     price_agent_node,
     safety_agent_node,
-    recommendation_orchestrator_node,
+    orchestrator_agent_node,
 )
 from server.utils.workflow_utils import classify_persona, generate_search_query
 
@@ -44,8 +44,7 @@ def recommendation_workflow() -> StateGraph:
     workflow.add_node("safety_agent", safety_agent_node)
 
     # 추천 오케스트레이터 (2개 결과 종합 및 랭킹)
-    workflow.add_node("recommendation_orchestrator",
-                      recommendation_orchestrator_node)
+    workflow.add_node("orchestrator_agent", orchestrator_agent_node)
 
     # 엣지 추가
     workflow.set_entry_point("init")
@@ -56,11 +55,11 @@ def recommendation_workflow() -> StateGraph:
     workflow.add_edge("init", "safety_agent")
 
     # 2개 서브에이전트 완료 후 오케스트레이터
-    workflow.add_edge("price_agent", "recommendation_orchestrator")
-    workflow.add_edge("safety_agent", "recommendation_orchestrator")
+    workflow.add_edge("price_agent", "orchestrator_agent")
+    workflow.add_edge("safety_agent", "orchestrator_agent")
 
     # 오케스트레이터 완료
-    workflow.add_edge("recommendation_orchestrator", END)
+    workflow.add_edge("orchestrator_agent", END)
 
     # 컴파일
     app = workflow.compile()
