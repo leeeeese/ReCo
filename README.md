@@ -29,10 +29,6 @@ ReCo/
 │   │       ├── ranker.py
 │   │       ├── router.py
 │   │       └── sql_generator.py
-│   ├── retrieval/          # RAG 검색
-│   │   ├── search_service.py
-│   │   ├── vector_store.py
-│   │   └── playbook/       # 페르소나 정의서
 │   └── utils/              # 유틸리티
 │       ├── config.py
 │       └── review_crawler.py
