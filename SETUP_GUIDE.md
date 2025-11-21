@@ -5,11 +5,9 @@
 ### 1. OpenAI API Key (필수)
 
 - **용도**: 모든 LLM 기반 Agent에서 사용
-  - Persona Classifier
   - Price Agent
   - Safety Agent
-  - Persona Matching Agent
-  - Recommendation Orchestrator
+  - Orchestrator Agent
 - **발급 방법**: https://platform.openai.com/api-keys
 - **비용**: 사용량에 따라 과금 (gpt-4o-mini는 저렴)
 - **설정**: `.env` 파일에 `OPENAI_API_KEY=sk-...` 추가
@@ -188,10 +186,10 @@ python server/utils/config.py
 - ✅ OpenAI API Key (필수)
 - ✅ SQLite/PostgreSQL/MySQL
 
-### Recommendation Orchestrator
+### Orchestrator Agent
 
 - ✅ OpenAI API Key (필수)
-- ✅ 2개 서브에이전트 결과
+- ✅ Price/Safety 에이전트 결과
 
 ---
 
