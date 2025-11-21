@@ -8,7 +8,11 @@ from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
 from server.workflow.agents.price_updater import PriceUpdater, joongna_search_prices
-from server.db.product_service import get_sellers_with_products, search_products_by_keywords
+from server.db.product_service import (
+    get_sellers_with_products,
+    search_products_by_keywords,
+)
+from server.workflow.prompts import load_prompt
 from server.workflow.agents.tool import (
     item_market_tool,
     price_risk_tool,
@@ -22,6 +26,7 @@ class PriceAgent:
 
     def __init__(self):
         self.llm_agent = create_agent("price_agent")
+        self.price_prompt = load_prompt("price_prompt")
 
     # ------------------------------------------------------------------
     # 🔥 STEP 1: 각 상품의 시세/시장가 수집
@@ -133,11 +138,7 @@ class PriceAgent:
         # ------------------------------------------------------------------
         decision = self.llm_agent.decide(
             context=context,
-            decision_task=(
-                "다음 상품들의 가격 합리성을 판단하고 사용자에게 가장 합리적인 판매자를 추천하십시오. "
-                "시세, 판매자 신뢰도, 리뷰, 거래 방식, 상품 상태를 모두 종합적으로 고려하세요. "
-                "각 판매자별로 점수와 추천 이유를 JSON으로 출력하세요."
-            ),
+            decision_task=self.price_prompt,
             format="json"
         )
 

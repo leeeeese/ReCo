@@ -96,8 +96,8 @@ test_persona_matching_agent()
 
 ```bash
 python -c "
-from server.test_agents import test_recommendation_orchestrator
-test_recommendation_orchestrator()
+from server.test_agents import test_orchestrator_agent
+test_orchestrator_agent()
 "
 ```
 
@@ -289,7 +289,7 @@ python test_full_workflow.py
 2. `price_agent` - 가격 분석 (병렬)
 3. `safety_agent` - 안전거래 분석 (병렬)
 4. `persona_matching_agent` - 페르소나 매칭 (병렬)
-5. `recommendation_orchestrator` - 최종 추천 통합
+5. `orchestrator_agent` - 최종 추천 통합
 
 ---
 
