@@ -12,6 +12,7 @@ from server.workflow.agents.tool import (
     review_feature_tool,
     trade_risk_tool,
 )
+from server.workflow.prompts import load_prompt
 
 
 class SafetyAgent:
@@ -19,6 +20,7 @@ class SafetyAgent:
 
     def __init__(self):
         self.llm_agent = create_agent("safety_agent")
+        self.safety_prompt = load_prompt("safety_prompt")
 
     def recommend_sellers_by_safety(
         self,
@@ -93,15 +95,7 @@ class SafetyAgent:
         # -------------------------------------------------------------
         decision = self.llm_agent.decide(
             context=context,
-            decision_task=(
-                "위 JSON에 포함된 판매자별 안전 관련 정보를 바탕으로, "
-                "사용자가 안전하게 거래할 수 있는 판매자를 추천하십시오. "
-                "각 판매자에 대해 판매자 신뢰도(seller_profile), 리뷰(review_features), "
-                "상품별 거래 리스크(product_trade_risks)를 종합적으로 판단하십시오. "
-                "사용자의 안전 선호도(user_trust_safety_preference)와 원격 거래 선호도"
-                "(user_remote_transaction_preference)를 함께 고려하여, "
-                "각 판매자별 안전 점수와 이유를 JSON으로 출력하십시오."
-            ),
+            decision_task=self.safety_prompt,
             format="json",
         )
 

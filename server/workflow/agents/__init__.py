@@ -1,14 +1,13 @@
 """
-워크플로우 Agents 모듈
-2개 서브에이전트만 유지
+워크플로우 Agents 노드 모음
 """
 
 from .price_agent import price_agent_node
 from .safety_agent import safety_agent_node
-from .recommendation_orchestrator import recommendation_orchestrator_node
+from .orchestrator_agent import orchestrator_agent_node
 
 __all__ = [
     "price_agent_node",
     "safety_agent_node",
-    "recommendation_orchestrator_node",
+    "orchestrator_agent_node",
 ]
