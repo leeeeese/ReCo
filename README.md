@@ -23,15 +23,14 @@ ReCo/
 │   │   ├── state.py        # State 정의
 │   │   ├── graph.py        # Graph 정의
 │   │   └── agents/         # Agent 구현
-│   │       ├── persona_classifier.py
-│   │       ├── query_generator.py
-│   │       ├── product_matching.py
-│   │       ├── ranker.py
-│   │       ├── router.py
-│   │       └── sql_generator.py
-│   └── utils/              # 유틸리티
+│   │       ├── price_agent.py         # 가격 합리성 판단
+│   │       ├── safety_agent.py        # 안전거래 판단
+│   │       ├── orchestrator_agent.py  # 최종 통합/랭킹
+│   │       ├── price_updater.py       # 시세 크롤러
+│   │       └── tool.py                # 공용/전용 툴 묶음
+│   └── utils/
 │       ├── config.py
-│       └── review_crawler.py
+│       └── workflow_utils.py
 └── requirements.txt
 ```
 
@@ -76,79 +75,44 @@ streamlit run main.py
 
 브라우저에서 `http://localhost:8501`로 접속할 수 있습니다.
 
-## 📚 API 사용법
+## 📚 주요 API
 
-### 1. 상품 추천
+| 엔드포인트               | 설명                      |
+| ------------------------ | ------------------------- |
+| `POST /api/v1/recommend` | 전체 추천 워크플로우 실행 |
+| `GET /api/v1/history`    | 추천 이력 조회            |
+| `GET /api/v1/health`     | 상태 확인                 |
 
-```bash
-curl -X POST "http://localhost:8000/api/v1/recommend" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "search_query": "아이폰 14",
-    "price_min": 1000000,
-    "price_max": 1500000,
-    "category": "스마트폰",
-    "location": "서울"
-  }'
-```
+## 🔄 워크플로우 요약
 
-### 2. 페르소나 목록 조회
+1. **초기화**
 
-```bash
-curl "http://localhost:8000/api/v1/personas"
-```
+   - 사용자 입력을 정규화하고 검색 키워드를 추출합니다.
+   - 현재는 페르소나 분류를 사용하지 않으며, 기본 맥락만 전달합니다.
 
-### 3. 헬스 체크
+2. **Price Agent**
 
-```bash
-curl "http://localhost:8000/api/v1/health"
-```
+   - DB에서 상품 목록을 가져와 `item_market_tool`, `price_risk_tool` 등을 통해 시세/판매자 정보를 정량화합니다.
+   - `server/workflow/prompts/price_prompt.txt` 프롬프트로 LLM 판단을 수행해 가격 관점 추천을 생성합니다.
 
-## 🔄 워크플로우
+3. **Safety Agent**
 
-1. **사용자 입력** → 검색 쿼리, 가격 범위, 카테고리 등
-2. **페르소나 분류** → 사용자 특성을 10가지 페르소나로 분류
-3. **검색 쿼리 생성** → 페르소나에 맞게 쿼리 향상
-4. **상품 매칭** → 텍스트 매칭 + 페르소나 매칭
-5. **랭킹** → 최종 추천 상품 순서 결정
+   - 판매자 프로필/리뷰/거래 리스크를 DB 기반 툴로 계산합니다.
+   - `server/workflow/prompts/safety_prompt.txt` 프롬프트로 LLM 판단을 수행해 안전 관점 추천을 생성합니다.
 
-## 🧠 페르소나 시스템
+4. **Orchestrator Agent**
+   - 가격/안전 결과를 `server/workflow/prompts/orchestrator_recommendation_prompt.txt`로 통합한 뒤,  
+     `orchestrator_ranking_prompt.txt`로 최종 상품 랭킹을 생성합니다.
+   - LLM 출력이 없을 경우 단순 결합 fallback 로직을 수행합니다.
 
-10가지 페르소나를 5축으로 분류:
+## 🧱 프롬프트 관리
 
-- **신뢰·안전** (Trust & Safety)
-- **품질·상태** (Quality & Condition)
-- **원격거래성향** (Remote Transaction Preference)
-- **활동·응답** (Activity & Responsiveness)
-- **가격유연성** (Price Flexibility)
-
-## 🛠️ 개발
-
-### Agent 추가
-
-1. `src/agents/`에 새 Agent 파일 생성
-2. `src/graphs/recommendation_graph.py`에 노드 추가
-3. 라우터에서 조건부 엣지 설정
-
-### State 확장
-
-`src/core/state.py`에서 `RecommendationState`를 수정하여 새로운 상태 필드 추가
+모든 프롬프트는 `server/workflow/prompts/` 디렉터리에 `.txt` 파일로 분리돼 있으며,  
+각 에이전트 초기화 시 `load_prompt()`로 불러옵니다. 내용만 수정하면 즉시 적용됩니다.
 
 ## 📝 TODO
 
-- [ ] Agents 파일들의 import 경로 수정
-- [ ] 실제 DB 연동 및 데이터 로드
-- [ ] LangGraph 워크플로우 통합
-- [ ] RAG 벡터 스토어 구현
-- [ ] Streamlit UI와 FastAPI 연결
-- [ ] 로깅 및 모니터링 추가
-- [ ] 단위 테스트 작성
-
-## ⚠️ 주의사항
-
-현재 agents 파일들은 이전 프로젝트 구조에서 가져온 것으로, import 경로가 현재 프로젝트 구조와 맞지 않을 수 있습니다. 수정이 필요합니다:
-
-1. `server/workflow/agents/persona_classifier.py` - import 경로 수정
-2. `server/workflow/agents/product_matching.py` - import 경로 수정
-3. `server/workflow/agents/ranker.py` - import 경로 수정
-4. 기타 필요한 유틸리티 모듈 구현
+- [ ] 자동화된 통합 테스트 작성
+- [ ] Streamlit UI와 최신 워크플로우 연결
+- [ ] 가격/안전 툴에 대한 캐싱 및 모니터링 추가
+- [ ] 운영 환경용 로그/알람 구성
