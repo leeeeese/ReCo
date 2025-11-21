@@ -26,9 +26,6 @@ PRICER_DATABASE_URL = os.getenv(
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
 
-# Playbook 경로
-PLAYBOOK_DIR = os.getenv("PLAYBOOK_DIR", "./server/retrieval/playbook")
-
 # 기타 설정
 UPDATE_BATCH_LIMIT = int(os.getenv("UPDATE_BATCH_LIMIT", "100"))
 USER_AGENT = os.getenv(
@@ -41,8 +38,6 @@ def validate_config() -> Dict[str, Any]:
         "openai_api_key": "✅ 설정됨" if OPENAI_API_KEY else "❌ 미설정 (필수)",
         "serpapi_key": "✅ 설정됨" if SERPAPI_KEY else "⚠️ 미설정 (선택)",
         "database_url": DATABASE_URL,
-        "playbook_dir": PLAYBOOK_DIR,
-        "playbook_exists": Path(PLAYBOOK_DIR).exists(),
     }
     return status
 
