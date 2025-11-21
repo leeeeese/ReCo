@@ -188,16 +188,10 @@ python server/utils/config.py
 - ✅ OpenAI API Key (필수)
 - ✅ SQLite/PostgreSQL/MySQL
 
-### Persona Matching Agent
-
-- ✅ OpenAI API Key (필수)
-- ✅ 페르소나 플레이북 파일 (`server/retrieval/playbook/personas/*.md`)
-- ✅ SQLite/PostgreSQL/MySQL
-
 ### Recommendation Orchestrator
 
 - ✅ OpenAI API Key (필수)
-- ✅ 3개 서브에이전트 결과
+- ✅ 2개 서브에이전트 결과
 
 ---
 
