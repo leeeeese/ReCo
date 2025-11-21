@@ -1,6 +1,6 @@
 """
 추천 오케스트레이터
-3개 서브에이전트(가격, 안전거래, 페르소나) 결과를 종합하여
+2개 서브에이전트(가격, 안전거래) 결과를 종합하여
 최종 판매자 추천 및 상품 랭킹을 수행
 """
 
@@ -23,18 +23,17 @@ class RecommendationOrchestrator:
     def combine_and_rank(self,
                          price_results: Dict[str, Any],
                          safety_results: Dict[str, Any],
-                         persona_results: Dict[str, Any],
                          user_input: Dict[str, Any],
                          persona_classification: Dict[str, Any]) -> Dict[str, Any]:
         """
-        3개 서브에이전트 결과를 종합하여 최종 추천 및 랭킹
+        2개 서브에이전트 결과를 종합하여 최종 추천 및 랭킹
 
         Returns:
             최종 추천 판매자 및 랭킹된 상품 리스트
         """
-        # 1. 3개 서브에이전트 결과 종합하여 판매자 추천
+        # 1. 2개 서브에이전트 결과 종합하여 판매자 추천
         final_sellers = self._combine_sub_agent_results(
-            price_results, safety_results, persona_results)
+            price_results, safety_results)
 
         # 2. 추천된 판매자의 상품들을 랭킹
         ranked_products = self._rank_products(
@@ -47,14 +46,12 @@ class RecommendationOrchestrator:
 
     def _combine_sub_agent_results(self,
                                    price_results: Dict[str, Any],
-                                   safety_results: Dict[str, Any],
-                                   persona_results: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """3개 서브에이전트 결과 종합"""
+                                   safety_results: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """2개 서브에이전트 결과 종합"""
         decision = self.llm_agent.analyze_and_combine(
             sub_agent_results=[
                 {"agent": "price", "results": price_results},
-                {"agent": "safety", "results": safety_results},
-                {"agent": "persona", "results": persona_results}
+                {"agent": "safety", "results": safety_results}
             ],
             combination_task=self.combine_sellers_prompt
         )
@@ -73,14 +70,7 @@ class RecommendationOrchestrator:
         self._merge_seller_results(
             all_sellers,
             safety_results.get("recommended_sellers", []),
-            "safety_score", "safety_reasoning", "safety_score"
-        )
-
-        # 페르소나 에이전트 결과 병합
-        self._merge_seller_results(
-            all_sellers,
-            persona_results.get("recommended_sellers", []),
-            "persona_score", "persona_reasoning", "persona_match_score",
+            "safety_score", "safety_reasoning", "safety_score",
             include_products=True
         )
 
@@ -102,7 +92,6 @@ class RecommendationOrchestrator:
                     "seller_name": seller["seller_name"],
                     "price_score": seller.get("price_score", 0),
                     "safety_score": seller.get("safety_score", 0),
-                    "persona_score": seller.get("persona_score", 0),
                     "final_score": final_score_data.get("score", 0),
                     "final_reasoning": final_score_data.get("reasoning", ""),
                     "combination_explanation": decision.get("reasoning", ""),
@@ -156,7 +145,6 @@ class RecommendationOrchestrator:
                     "seller_name": seller_name,
                     "seller_price_score": seller.get("price_score", 0),
                     "seller_safety_score": seller.get("safety_score", 0),
-                    "seller_persona_score": seller.get("persona_score", 0),
                     "seller_final_score": seller.get("final_score", 0)
                 })
 
@@ -170,7 +158,6 @@ class RecommendationOrchestrator:
                 "seller_name": seller.get("seller_name"),
                 "price": seller.get("price_score", 0),
                 "safety": seller.get("safety_score", 0),
-                "persona": seller.get("persona_score", 0),
                 "final": seller.get("final_score", 0)
             }
             for seller in final_sellers[:10]
@@ -220,12 +207,11 @@ class RecommendationOrchestrator:
 def recommendation_orchestrator_node(state: RecommendationState) -> RecommendationState:
     """추천 오케스트레이터 노드"""
     try:
-        # 3개 서브에이전트 결과 가져오기
+        # 2개 서브에이전트 결과 가져오기
         price_results = state.get("price_agent_recommendations", {})
         safety_results = state.get("safety_agent_recommendations", {})
-        persona_results = state.get("persona_matching_recommendations", {})
 
-        if not price_results or not safety_results or not persona_results:
+        if not price_results or not safety_results:
             raise ValueError("서브에이전트 결과가 완료되지 않았습니다.")
 
         user_input = state.get("user_input")
@@ -236,7 +222,6 @@ def recommendation_orchestrator_node(state: RecommendationState) -> Recommendati
         result = orchestrator.combine_and_rank(
             price_results,
             safety_results,
-            persona_results,
             user_input,
             persona_classification
         )
