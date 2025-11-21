@@ -31,8 +31,6 @@ python server/utils/config.py
 openai_api_key: ✅ 설정됨
 serpapi_key: ✅ 설정됨
 database_url: sqlite:///./history.db
-playbook_dir: ./server/retrieval/playbook
-playbook_exists: True
 ```
 
 ### 1.2 데이터베이스 테이블 생성 확인
