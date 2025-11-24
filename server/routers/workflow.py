@@ -6,8 +6,20 @@ from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 from server.db.schemas import UserInput, RecommendationResult
 from server.workflow.state import RecommendationState
+from server.workflow.graph import recommendation_workflow
+import time
 
 router = APIRouter(prefix="/api/v1", tags=["workflow"])
+
+# 워크플로우 인스턴스 생성 (싱글톤)
+_workflow_app = None
+
+def get_workflow_app():
+    """워크플로우 앱 싱글톤"""
+    global _workflow_app
+    if _workflow_app is None:
+        _workflow_app = recommendation_workflow()
+    return _workflow_app
 
 
 @router.post("/recommend")
@@ -21,27 +33,55 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             "user_input": user_input.dict(),
             "search_query": {},
             "persona_classification": None,
-            "seller_item_scores": [],
-            "final_item_scores": [],
-            "sql_query": None,
+            "price_agent_recommendations": None,
+            "safety_agent_recommendations": None,
+            "final_seller_recommendations": None,
+            "final_item_scores": None,
             "ranking_explanation": "",
             "current_step": "start",
             "completed_steps": [],
             "error_message": None,
+            "execution_start_time": time.time(),
+            "execution_time": None,
         }
 
-        # TODO: LangGraph 워크플로우 실행
-        # workflow.run(initial_state)
+        # LangGraph 워크플로우 실행
+        workflow_app = get_workflow_app()
+        final_state = workflow_app.invoke(initial_state)
 
-        # 임시 응답
-        return {
-            "status": "success",
-            "message": "추천 시스템 준비 중",
-            "persona": user_input.dict(),
+        # 실행 시간 계산
+        if final_state.get("execution_start_time"):
+            final_state["execution_time"] = time.time() - final_state["execution_start_time"]
+
+        # 응답 생성
+        response: Dict[str, Any] = {
+            "status": "success" if not final_state.get("error_message") else "error",
         }
+
+        # 에러가 있으면 반환
+        if final_state.get("error_message"):
+            response["error_message"] = final_state["error_message"]
+            return response
+
+        # 성공 응답 구성
+        response.update({
+            "persona_classification": final_state.get("persona_classification"),
+            "final_item_scores": final_state.get("final_item_scores", []),
+            "ranked_products": final_state.get("final_item_scores", []),  # 호환성을 위해
+            "final_seller_recommendations": final_state.get("final_seller_recommendations", []),
+            "ranking_explanation": final_state.get("ranking_explanation", ""),
+            "current_step": final_state.get("current_step", "completed"),
+            "completed_steps": final_state.get("completed_steps", []),
+            "execution_time": final_state.get("execution_time"),
+        })
+
+        return response
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_detail = str(e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @router.get("/health")

@@ -229,6 +229,14 @@ class OrchestratorAgent:
                         "seller_price_score": seller.get("price_score", 0.0),
                         "seller_safety_score": seller.get("safety_score", 0.0),
                         "seller_final_score": seller.get("final_score", 0.0),
+                        # 프론트엔드 호환성을 위한 필드 추가
+                        "final_score": seller.get("final_score", 0.0),  # seller_final_score를 final_score로도 사용
+                        "ranking_factors": {
+                            "price_score": seller.get("price_score", 0.0),
+                            "safety_score": seller.get("safety_score", 0.0),
+                            "final_score": seller.get("final_score", 0.0),
+                            "reasoning": seller.get("final_reasoning", ""),
+                        },
                     }
                 )
 

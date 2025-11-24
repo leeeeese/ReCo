@@ -129,19 +129,32 @@ OPENAI_API_KEY=sk-your_actual_api_key_here
 DATABASE_URL=sqlite:///./history.db  # 또는 PostgreSQL/MySQL URL
 ```
 
-### 3. Python 패키지 설치
+### 3. 백엔드 의존성 설치
 
 ```bash
+# Python 가상환경 생성 (권장)
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Python 패키지 설치
 pip install -r requirements.txt
 ```
 
-### 4. Playwright 브라우저 설치 (Price Agent용)
+### 4. 프론트엔드 의존성 설치
+
+```bash
+# Node.js 18+ 필요
+cd app/frontend
+npm install
+```
+
+### 5. Playwright 브라우저 설치 (Price Agent용)
 
 ```bash
 playwright install chromium
 ```
 
-### 5. 데이터베이스 초기화
+### 6. 데이터베이스 초기화
 
 ```bash
 # Python에서 테이블 생성
@@ -150,11 +163,27 @@ python -c "from server.db.database import database; database.create_tables()"
 # 또는 서버 실행 시 자동 생성됨
 ```
 
-### 6. 설정 검증
+### 7. 설정 검증
 
 ```bash
 python server/utils/config.py
 ```
+
+### 8. 애플리케이션 실행
+
+**백엔드 실행:**
+```bash
+cd server
+python main.py
+```
+
+**프론트엔드 실행 (새 터미널):**
+```bash
+cd app/frontend
+npm run dev
+```
+
+브라우저에서 `http://localhost:3000`으로 접속하세요.
 
 ---
 
@@ -207,6 +236,42 @@ DATABASE_URL=sqlite:///./history.db
 
 ---
 
+## 🌐 프론트엔드 설정
+
+### 환경 변수 (선택사항)
+
+프론트엔드에서 FastAPI 서버 URL을 변경하려면:
+
+```bash
+cd app/frontend
+cp .env.example .env
+```
+
+`.env` 파일에 다음을 설정:
+```bash
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+기본값은 `http://localhost:8000`이므로 대부분의 경우 설정 불필요합니다.
+
+### 빌드
+
+프로덕션 빌드:
+```bash
+cd app/frontend
+npm run build
+```
+
+빌드된 파일은 `app/frontend/build` 폴더에 생성됩니다.
+
+### CORS 설정
+
+FastAPI 서버는 다음 origin에서의 요청을 허용합니다:
+- `http://localhost:3000` (Vite 개발 서버)
+- `http://localhost:5173` (Vite 대체 포트)
+
+다른 포트를 사용하는 경우 `server/main.py`의 CORS 설정을 수정하세요.
+
 ## ⚠️ 주의사항
 
 1. **API 키 보안**
@@ -221,3 +286,7 @@ DATABASE_URL=sqlite:///./history.db
 3. **Playwright**
    - 시세 크롤링 시 웹사이트 정책에 따라 차단될 수 있음
    - 적절한 딜레이와 에러 처리 필요
+
+4. **Node.js 버전**
+   - Node.js 18 이상 필요
+   - `node --version`으로 확인
