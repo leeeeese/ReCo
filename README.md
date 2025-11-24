@@ -6,10 +6,14 @@ LangGraph Agent 기반의 중고거래 상품 추천 시스템입니다.
 
 ```
 ReCo/
-├── app/                       # Streamlit UI
-│   ├── main.py              # Streamlit 메인 애플리케이션
-│   ├── components/          # UI 컴포넌트
-│   └── utils/               # 유틸리티 함수
+├── app/                       # 프론트엔드
+│   ├── frontend/            # React + Vite 프론트엔드
+│   │   ├── src/             # 소스 코드
+│   │   │   ├── components/  # React 컴포넌트
+│   │   │   └── utils/       # 유틸리티 (API 클라이언트)
+│   │   ├── package.json     # Node.js 의존성
+│   │   └── vite.config.ts   # Vite 설정
+│   └── pages/               # Streamlit 페이지 (레거시)
 ├── server/                   # FastAPI 백엔드
 │   ├── main.py              # FastAPI 메인 애플리케이션
 │   ├── routers/             # API 라우터
@@ -36,24 +40,38 @@ ReCo/
 
 ## 🚀 설치 및 실행
 
-### 1. 의존성 설치
+### 1. 백엔드 의존성 설치
 
 ```bash
+# Python 가상환경 생성 (권장)
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Python 패키지 설치
 pip install -r requirements.txt
 ```
 
-### 2. 환경변수 설정
+### 2. 프론트엔드 의존성 설치
+
+```bash
+# Node.js 18+ 필요
+cd app/frontend
+npm install
+```
+
+### 3. 환경변수 설정
 
 ```bash
 cp env.example .env
 # .env 파일을 편집하여 실제 값 입력
 ```
 
-### 3. 데이터베이스 설정
+### 4. 데이터베이스 설정
 
 기본적으로 SQLite를 사용합니다. 필요시 PostgreSQL이나 MySQL 설정 가능.
+자세한 내용은 [SETUP_GUIDE.md](SETUP_GUIDE.md)를 참고하세요.
 
-### 4. 서버 실행
+### 5. 서버 실행
 
 #### FastAPI 백엔드
 
@@ -66,7 +84,22 @@ python main.py
 
 API 문서: `http://localhost:8000/docs`
 
-#### Streamlit UI
+#### React 프론트엔드
+
+```bash
+# 프론트엔드 의존성 설치 (처음 한 번만)
+cd app/frontend
+npm install
+
+# 개발 서버 실행
+npm run dev
+```
+
+브라우저에서 `http://localhost:3000`으로 접속할 수 있습니다.
+
+**참고**: FastAPI 서버가 먼저 실행되어 있어야 프론트엔드가 정상 작동합니다.
+
+#### Streamlit UI (레거시)
 
 ```bash
 cd app
@@ -88,7 +121,7 @@ streamlit run main.py
 1. **초기화**
 
    - 사용자 입력을 정규화하고 검색 키워드를 추출합니다.
-   - 현재는 페르소나 분류를 사용하지 않으며, 기본 맥락만 전달합니다.
+   - 페르소나 분류를 수행합니다.
 
 2. **Price Agent**
 
@@ -110,9 +143,25 @@ streamlit run main.py
 모든 프롬프트는 `server/workflow/prompts/` 디렉터리에 `.txt` 파일로 분리돼 있으며,  
 각 에이전트 초기화 시 `load_prompt()`로 불러옵니다. 내용만 수정하면 즉시 적용됩니다.
 
+## 🛠️ 기술 스택
+
+### 백엔드
+- **FastAPI**: RESTful API 서버
+- **LangGraph**: 워크플로우 오케스트레이션
+- **LangChain**: LLM 통합
+- **SQLAlchemy**: ORM
+- **SQLite/PostgreSQL/MySQL**: 데이터베이스
+
+### 프론트엔드
+- **React 18**: UI 라이브러리
+- **TypeScript**: 타입 안정성
+- **Vite**: 빌드 도구
+- **Tailwind CSS**: 스타일링
+- **Radix UI**: 접근성 컴포넌트
+- **Lucide React**: 아이콘
+
 ## 📝 TODO
 
 - [ ] 자동화된 통합 테스트 작성
-- [ ] Streamlit UI와 최신 워크플로우 연결
 - [ ] 가격/안전 툴에 대한 캐싱 및 모니터링 추가
 - [ ] 운영 환경용 로그/알람 구성
