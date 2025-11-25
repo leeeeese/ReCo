@@ -7,6 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from server.routers import workflow_router, history_router
 from server.db.database import database
+from server.utils.logger import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger(__name__)
 
 app = FastAPI(
     title="ReCo - 중고거래 추천 시스템",
@@ -33,7 +37,7 @@ app.include_router(history_router)
 @app.on_event("startup")
 async def startup():
     database.create_tables()
-    print("데이터베이스 초기화 완료")
+    logger.info("데이터베이스 초기화 완료")
 
 
 @app.get("/")

@@ -2,14 +2,18 @@
 워크플로우 라우터
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 from server.db.schemas import UserInput, RecommendationResult
 from server.workflow.state import RecommendationState
 from server.workflow.graph import recommendation_workflow
+from server.utils.logger import get_logger
+from server.utils import config
 import time
 
 router = APIRouter(prefix="/api/v1", tags=["workflow"])
+logger = get_logger(__name__)
 
 # 워크플로우 인스턴스 생성 (싱글톤)
 _workflow_app = None
@@ -45,9 +49,25 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             "execution_time": None,
         }
 
-        # LangGraph 워크플로우 실행
+        # LangGraph 워크플로우 실행 (타임아웃 포함)
         workflow_app = get_workflow_app()
-        final_state = workflow_app.invoke(initial_state)
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            final_state = await asyncio.wait_for(
+                loop.run_in_executor(None, workflow_app.invoke, initial_state),
+                timeout=config.WORKFLOW_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "워크플로우 실행 타임아웃",
+                extra={"timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS},
+            )
+            return {
+                "status": "error",
+                "error_message": "추천 시스템 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.",
+            }
 
         # 실행 시간 계산
         if final_state.get("execution_start_time"):
@@ -61,6 +81,10 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         # 에러가 있으면 반환
         if final_state.get("error_message"):
             response["error_message"] = final_state["error_message"]
+            logger.error(
+                "워크플로우 실행 오류",
+                extra={"error": final_state["error_message"]},
+            )
             return response
 
         # 성공 응답 구성
@@ -78,10 +102,8 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         return response
 
     except Exception as e:
-        import traceback
-        error_detail = str(e)
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=error_detail)
+        logger.exception("추천 워크플로우 실행 중 예외 발생")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/health")

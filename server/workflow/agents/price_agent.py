@@ -19,6 +19,9 @@ from server.workflow.agents.tool import (
     seller_profile_tool,
     review_feature_tool,
 )
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class PriceAgent:
@@ -49,7 +52,7 @@ class PriceAgent:
                         "sample_count": len(prices)
                     }
             except Exception as e:
-                print(f"시세 조회 실패: {e}")
+                logger.warning("시세 조회 실패", exc_info=e, extra={"product": product})
                 continue
 
         return market_data
@@ -231,6 +234,7 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
         state["completed_steps"].append("price_analysis")
 
     except Exception as e:
+        logger.exception("가격 에이전트 오류")
         state["error_message"] = f"가격 에이전트 오류: {str(e)}"
         state["current_step"] = "error"
 

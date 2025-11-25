@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Navigation from './Navigation';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -22,9 +22,9 @@ type Message = {
     image: string;
     name: string;
     price: string;
-    avgPrice: string;
+    avgPrice?: string;
     score: number;
-    reason: string;
+    reason?: string;
     site: string;
     link: string;
   }>;
@@ -84,7 +84,9 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
   // API 응답을 ProductCard 형식으로 변환
   const convertToProductCard = (result: RecommendationResult) => {
     const rankingFactors = result.ranking_factors || {};
-    const reason = rankingFactors.reasoning || rankingFactors.reason || '추천 상품입니다.';
+    const reasonValue = rankingFactors.reasoning || rankingFactors.reason || '추천 상품입니다.';
+    const reason =
+      typeof reasonValue === 'string' ? reasonValue : JSON.stringify(reasonValue);
     
     return {
       image: `https://images.unsplash.com/photo-1557817683-5cfe3620b05c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400`,
@@ -92,7 +94,7 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
       price: `₩${result.price.toLocaleString()}`,
       avgPrice: rankingFactors.market_avg ? `₩${Math.round(rankingFactors.market_avg).toLocaleString()}` : undefined,
       score: Math.round(result.final_score * 100),
-      reason: reason,
+      reason,
       site: result.seller_name || '중고나라',
       link: '#'
     };
@@ -171,7 +173,10 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         type: 'bot',
-        text: '오류가 발생했습니다. 서버 연결을 확인해주세요.'
+        text:
+          error instanceof Error
+            ? error.message
+            : '오류가 발생했습니다. 서버 연결을 확인해주세요.'
       };
       setMessages(prev => [...prev, errorMessage]);
       console.error('API 호출 오류:', error);
