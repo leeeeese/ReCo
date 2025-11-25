@@ -15,18 +15,19 @@
 
 **파일**: `server/utils/logger.py` 생성 필요
 
-### 2. 에러 처리 및 타임아웃 강화
-**현재 상태**: 기본적인 try-except만 있음
-**필요 작업**:
-- 워크플로우 타임아웃 설정 (30-60초)
-- LLM API 호출 재시도 로직
-- 데이터베이스 연결 타임아웃
-- 프론트엔드 타임아웃 처리
-- 사용자 친화적 에러 메시지
+### 2. 에러 처리 및 타임아웃 강화 ✅ (완료)
+**변경 내용**:
+- 워크플로우 실행 타임아웃(기본 60초) 추가 및 사용자 친화적 오류 메시지
+- LLM 호출 재시도 및 요청 타임아웃 적용
+- 데이터베이스 연결 풀/타임아웃 설정
+- 프론트엔드 Fetch 타임아웃 및 세분화된 오류 메시지
 
-**파일**: 
-- `server/routers/workflow.py` 수정
-- `app/frontend/src/utils/api.ts` 수정
+**관련 파일**: 
+- `server/routers/workflow.py`
+- `server/utils/llm_agent.py`
+- `server/db/database.py`
+- `app/frontend/src/utils/api.ts`
+- `app/frontend/src/components/ChatInterface.tsx`
 
 ### 3. 입력 검증 강화
 **현재 상태**: Pydantic 기본 검증만 있음

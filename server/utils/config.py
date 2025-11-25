@@ -16,15 +16,22 @@ load_dotenv(dotenv_path=env_path)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # 선택사항
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
 # 데이터베이스 설정
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./history.db")
 PRICER_DATABASE_URL = os.getenv(
     "PRICER_DATABASE_URL", "sqlite:///./used_pricer.db")
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+DB_CONN_TIMEOUT = int(os.getenv("DB_CONN_TIMEOUT", "30"))
 
 # 서버 설정
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
+WORKFLOW_TIMEOUT_SECONDS = int(os.getenv("WORKFLOW_TIMEOUT_SECONDS", "60"))
 
 # 기타 설정
 UPDATE_BATCH_LIMIT = int(os.getenv("UPDATE_BATCH_LIMIT", "100"))

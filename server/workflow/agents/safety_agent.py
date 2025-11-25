@@ -13,6 +13,9 @@ from server.workflow.agents.tool import (
     trade_risk_tool,
 )
 from server.workflow.prompts import load_prompt
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class SafetyAgent:
@@ -178,8 +181,9 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
             if not sellers_with_products:
                 raise ValueError("DB에서 상품 데이터를 찾을 수 없습니다.")
 
-            print(
-                f"DB에서 {len(sellers_with_products)}개 판매자 조회 완료 (안전거래 분석용)"
+            logger.info(
+                "안전거래 분석용 판매자 조회 완료",
+                extra={"seller_count": len(sellers_with_products)},
             )
         except Exception as e:
             raise ValueError(f"안전거래 에이전트 데이터 조회 실패: {e}")
@@ -198,13 +202,14 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
         state["current_step"] = "safety_analyzed"
         state["completed_steps"].append("safety_analysis")
 
-        print(
-            f"안전거래 에이전트 분석 완료: {len(safety_recommendations)}개 판매자 추천"
+        logger.info(
+            "안전거래 에이전트 분석 완료",
+            extra={"recommended_sellers": len(safety_recommendations)},
         )
 
     except Exception as e:
+        logger.exception("안전거래 에이전트 오류")
         state["error_message"] = f"안전거래 에이전트 오류: {str(e)}"
         state["current_step"] = "error"
-        print(f"안전거래 에이전트 오류: {e}")
 
     return state

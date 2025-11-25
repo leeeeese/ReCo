@@ -8,6 +8,9 @@ from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
 from server.workflow.prompts import load_prompt
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class OrchestratorAgent:
@@ -323,19 +326,29 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
         state["current_step"] = "recommendation_completed"
         state.setdefault("completed_steps", []).append("recommendation")
 
-        print(
-            f"최종 추천 완료: {len(result['final_seller_recommendations'])}개 판매자, {len(result['ranked_products'])}개 상품"
+        logger.info(
+            "최종 추천 완료",
+            extra={
+                "seller_count": len(result["final_seller_recommendations"]),
+                "product_count": len(result["ranked_products"]),
+            },
         )
 
         for i, seller in enumerate(
             result["final_seller_recommendations"][:5], 1
         ):
-            print(
-                f"  {i}. {seller['seller_name']} (최종점수: {seller['final_score']:.3f})")
+            logger.info(
+                "추천 판매자 미리보기",
+                extra={
+                    "rank": i,
+                    "seller_name": seller["seller_name"],
+                    "final_score": seller.get("final_score"),
+                },
+            )
 
     except Exception as e:
+        logger.exception("추천 오케스트레이터 오류")
         state["error_message"] = f"추천 오케스트레이터 오류: {str(e)}"
         state["current_step"] = "error"
-        print(f"추천 오케스트레이터 오류: {e}")
 
     return state
