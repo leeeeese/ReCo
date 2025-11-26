@@ -2,37 +2,80 @@
 pytest 공통 픽스처 및 설정
 """
 
-import pytest
 import os
 from typing import Dict, Any
+
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from server.main import app
-from server.db.database import Base, engine
+from server.db import database as db_module
 from server.workflow.state import RecommendationState
 
 
 @pytest.fixture(scope="session")
 def test_db():
-    """테스트용 데이터베이스 설정"""
-    # 테스트용 SQLite DB 사용
+    """
+    테스트용 SQLite 데이터베이스 설정
+
+    - 실제 개발 DB와 분리된 test_history.db 사용
+    - server.db.database 모듈의 engine / SessionLocal 을 테스트용으로 교체
+    """
     test_db_url = "sqlite:///./test_history.db"
-    os.environ["DATABASE_URL"] = test_db_url
-    
-    # 테이블 생성
-    Base.metadata.create_all(bind=engine)
-    
+
+    # 1) 테스트용 엔진/세션팩토리 생성
+    test_engine = create_engine(
+        test_db_url,
+        connect_args={"check_same_thread": False},
+    )
+    TestingSessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=test_engine,
+    )
+
+    # 2) 기존 모듈의 엔진/세션을 테스트용으로 교체
+    db_module.engine = test_engine
+    db_module.SessionLocal = TestingSessionLocal
+    Base = db_module.Base
+
+    # 3) 스키마 생성
+    Base.metadata.create_all(bind=test_engine)
+
     yield
-    
-    # 테스트 후 정리
-    Base.metadata.drop_all(bind=engine)
+
+    # 4) 정리: 테이블 드랍 + 파일 삭제
+    Base.metadata.drop_all(bind=test_engine)
     if os.path.exists("test_history.db"):
         os.remove("test_history.db")
 
 
 @pytest.fixture
 def client(test_db):
-    """FastAPI 테스트 클라이언트"""
-    return TestClient(app)
+    """
+    FastAPI 테스트 클라이언트
+
+    - test_db 픽스처를 선행 실행하여 테스트용 DB를 준비
+    - FastAPI의 get_db 의존성을 테스트용 세션으로 override
+    """
+    # get_db가 database 모듈에 있다고 가정
+    from server.db.database import get_db
+
+    def override_get_db():
+        db = db_module.SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(app) as c:
+        yield c
+
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -86,10 +129,9 @@ def mock_conversation_context() -> Dict[str, Any]:
                         "trust_safety": 70.0,
                         "quality_condition": 80.0,
                     }
-                }
+                },
             }
         ],
         "total_messages": 1,
         "session_id": "test-session-123",
     }
-
