@@ -320,12 +320,6 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             persona_classification,
         )
 
-        state["final_seller_recommendations"] = result["final_seller_recommendations"]
-        state["final_item_scores"] = result["ranked_products"]
-        state["ranking_explanation"] = "LLM 기반 자율 판단으로 최종 추천 및 랭킹 완료"
-        state["current_step"] = "recommendation_completed"
-        state.setdefault("completed_steps", []).append("recommendation")
-
         logger.info(
             "최종 추천 완료",
             extra={
@@ -346,9 +340,19 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
                 },
             )
 
+        # 새로운 state 반환 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
+        # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        return {
+            "final_seller_recommendations": result["final_seller_recommendations"],
+            "final_item_scores": result["ranked_products"],
+            "ranking_explanation": "LLM 기반 자율 판단으로 최종 추천 및 랭킹 완료",
+            "current_step": "recommendation_completed",
+            "completed_steps": ["recommendation"],  # add reducer가 기존 리스트와 병합
+        }
+
     except Exception as e:
         logger.exception("추천 오케스트레이터 오류")
-        state["error_message"] = f"추천 오케스트레이터 오류: {str(e)}"
-        state["current_step"] = "error"
-
-    return state
+        return {
+            "error_message": f"추천 오케스트레이터 오류: {str(e)}",
+            "current_step": "error",
+        }

@@ -238,18 +238,21 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
             sellers_with_products
         )
 
-        # 3) 상태 저장
-        state["price_agent_recommendations"] = {
-            "recommended_sellers": price_recommendations,
-            "market_analysis": {},
-            "reasoning": "가격 관점 분석 완료"
+        # 3) 상태 저장 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
+        # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        return {
+            "price_agent_recommendations": {
+                "recommended_sellers": price_recommendations,
+                "market_analysis": {},
+                "reasoning": "가격 관점 분석 완료"
+            },
+            "current_step": "price_analyzed",
+            "completed_steps": ["price_analysis"],  # add reducer가 기존 리스트와 병합
         }
-        state["current_step"] = "price_analyzed"
-        state["completed_steps"].append("price_analysis")
 
     except Exception as e:
         logger.exception("가격 에이전트 오류")
-        state["error_message"] = f"가격 에이전트 오류: {str(e)}"
-        state["current_step"] = "error"
-
-    return state
+        return {
+            "error_message": f"가격 에이전트 오류: {str(e)}",
+            "current_step": "error",
+        }
