@@ -194,22 +194,25 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
             sellers_with_products,
         )
 
-        # 결과를 상태에 저장
-        state["safety_agent_recommendations"] = {
-            "recommended_sellers": safety_recommendations,
-            "reasoning": "안전거래 관점에서 신뢰할 수 있는 판매자 추천 완료",
-        }
-        state["current_step"] = "safety_analyzed"
-        state["completed_steps"].append("safety_analysis")
-
+        # 결과를 상태에 저장 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
         logger.info(
             "안전거래 에이전트 분석 완료",
             extra={"recommended_sellers": len(safety_recommendations)},
         )
 
+        # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        return {
+            "safety_agent_recommendations": {
+                "recommended_sellers": safety_recommendations,
+                "reasoning": "안전거래 관점에서 신뢰할 수 있는 판매자 추천 완료",
+            },
+            "current_step": "safety_analyzed",
+            "completed_steps": ["safety_analysis"],  # add reducer가 기존 리스트와 병합
+        }
+
     except Exception as e:
         logger.exception("안전거래 에이전트 오류")
-        state["error_message"] = f"안전거래 에이전트 오류: {str(e)}"
-        state["current_step"] = "error"
-
-    return state
+        return {
+            "error_message": f"안전거래 에이전트 오류: {str(e)}",
+            "current_step": "error",
+        }

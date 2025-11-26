@@ -47,9 +47,17 @@ def test_db():
     yield
 
     # 4) 정리: 테이블 드랍 + 파일 삭제
+    # Windows에서 SQLite 파일 삭제 전에 모든 연결을 닫아야 함
+    test_engine.dispose()
     Base.metadata.drop_all(bind=test_engine)
-    if os.path.exists("test_history.db"):
-        os.remove("test_history.db")
+    
+    # 파일 삭제 시도 (다른 프로세스가 사용 중이면 무시)
+    try:
+        if os.path.exists("test_history.db"):
+            os.remove("test_history.db")
+    except PermissionError:
+        # Windows에서 파일이 잠겨있을 수 있음 - 무시
+        pass
 
 
 @pytest.fixture
@@ -60,8 +68,8 @@ def client(test_db):
     - test_db 픽스처를 선행 실행하여 테스트용 DB를 준비
     - FastAPI의 get_db 의존성을 테스트용 세션으로 override
     """
-    # get_db가 database 모듈에 있다고 가정
-    from server.db.database import get_db
+    # get_db는 history.py에 정의되어 있음
+    from server.routers.history import get_db
 
     def override_get_db():
         db = db_module.SessionLocal()

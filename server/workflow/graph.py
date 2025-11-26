@@ -31,20 +31,24 @@ def recommendation_workflow() -> StateGraph:
         
         # 페르소나 분류
         persona_classification = classify_persona(user_input)
-        state["persona_classification"] = persona_classification
         
         # user_input에 persona_type 추가 (agents에서 사용하기 위해)
         user_input["persona_type"] = persona_classification.get("persona_type")
-        state["user_input"] = user_input
 
         # 검색 쿼리 생성
         search_query = generate_search_query(
             user_input, persona_classification)
-        state["search_query"] = search_query
 
-        state["current_step"] = "initialized"
-        state["completed_steps"].append("initialization")
-        return state
+        # 새로운 state 반환 (LangGraph는 immutable state를 요구)
+        # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        return {
+            **state,
+            "user_input": user_input,
+            "persona_classification": persona_classification,
+            "search_query": search_query,
+            "current_step": "initialized",
+            "completed_steps": ["initialization"],  # add reducer가 기존 리스트와 병합
+        }
 
     # 2개 서브에이전트
     workflow.add_node("price_agent", price_agent_node)
