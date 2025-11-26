@@ -19,6 +19,22 @@ LOG_FILE_PATH = LOG_DIR / "app.log"
 _logging_configured = False
 
 
+def _json_serialize(obj: Any) -> Any:
+    """JSON 직렬화 가능한 형태로 변환"""
+    if isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    elif isinstance(obj, dict):
+        return {k: _json_serialize(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_json_serialize(item) for item in obj]
+    elif hasattr(obj, '__dict__'):
+        # 객체인 경우 dict로 변환
+        return _json_serialize(obj.__dict__)
+    else:
+        # 그 외의 경우 문자열로 변환
+        return str(obj)
+
+
 class JsonFormatter(logging.Formatter):
     """JSON 형태의 로그 포맷터"""
 
@@ -36,12 +52,22 @@ class JsonFormatter(logging.Formatter):
         if record.stack_info:
             log_record["stack_info"] = self.formatStack(record.stack_info)
 
-        # 추가 필드
+        # 추가 필드 (extra 파라미터 등)
         for key, value in record.__dict__.items():
             if key not in logging.LogRecord.__dict__:
-                log_record[key] = value
+                try:
+                    # JSON 직렬화 가능한 형태로 변환
+                    log_record[key] = _json_serialize(value)
+                except Exception:
+                    # 직렬화 실패 시 문자열로 변환
+                    log_record[key] = str(value)
 
-        return json.dumps(log_record, ensure_ascii=False)
+        try:
+            return json.dumps(log_record, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            # 최종 직렬화 실패 시 안전하게 처리
+            log_record["_serialization_error"] = "Failed to serialize log record"
+            return json.dumps(log_record, ensure_ascii=False, default=str)
 
 
 def setup_logging() -> None:

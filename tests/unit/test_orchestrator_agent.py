@@ -21,45 +21,52 @@ class TestOrchestratorAgent:
         assert agent.combine_sellers_prompt is not None
         assert agent.rank_products_prompt is not None
     
-    @patch('server.workflow.agents.orchestrator_agent.get_sellers_with_products')
-    def test_combine_and_rank(
-        self,
-        mock_get_sellers
-    ):
+    def test_combine_and_rank(self):
         """결과 통합 및 랭킹 테스트"""
-        mock_get_sellers.return_value = [
-            {
-                "product_id": 1,
-                "seller_id": 101,
-                "title": "테스트 상품",
-                "price": 100000,
-            }
-        ]
-        
         agent = OrchestratorAgent()
+        
+        # 실제 구조에 맞게 price_results와 safety_results 설정
+        test_product = {"product_id": 1, "seller_id": 101, "title": "테스트 상품", "price": 100000}
         price_results = {
-            "recommended_sellers": [{"seller_id": 101, "score": 0.8}],
+            "recommended_sellers": [{
+                "seller_id": 101,
+                "seller_name": "테스트 판매자",
+                "price_score": 0.8,
+                "price_reasoning": "합리적",
+                "products": [test_product]
+            }],
         }
         safety_results = {
-            "recommended_sellers": [{"seller_id": 101, "score": 0.85}],
+            "recommended_sellers": [{
+                "seller_id": 101,
+                "seller_name": "테스트 판매자",
+                "safety_score": 0.85,
+                "safety_reasoning": "안전함",
+                "products": [test_product]
+            }],
         }
         user_input = {"search_query": "아이폰"}
         persona_classification = {"persona_type": "balanced"}
         
         # LLM 에이전트 모킹
         agent.llm_agent.analyze_and_combine = Mock(return_value={
-            "recommended_seller_ids": [101],
+            "final_recommendations": {
+                "seller_ids": [101],
+                "scores": {
+                    "101": {"score": 0.8, "reasoning": "통합 추천"}
+                }
+            },
             "reasoning": "통합 추천",
         })
         agent.llm_agent.decide = Mock(return_value={
-            "ranked_items": [{"product_id": 1, "rank": 1}],
+            "ranked_product_ids": [1],
         })
         
         result = agent.combine_and_rank(
             price_results, safety_results, user_input, persona_classification
         )
         
-        assert "final_seller_recommendations" in result or "final_item_scores" in result
+        assert "final_seller_recommendations" in result or "ranked_products" in result
 
 
 @pytest.mark.unit

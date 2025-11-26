@@ -97,21 +97,39 @@ class TestPriceAgentNode:
     def test_price_agent_node_success(self, mock_get_sellers, mock_search_products, mock_initial_state):
         """가격 에이전트 노드 성공 테스트"""
         # get_sellers_with_products 형식으로 반환 (seller별로 그룹화)
-        mock_get_sellers.return_value = [
+        # 실제 product_service.get_sellers_with_products의 반환 구조와 일치
+        mock_sellers_data = [
             {
                 "seller_id": 101,
                 "seller_name": "테스트 판매자",
+                "seller_trust": 0.8,
+                "seller_safe_sales": 50,
+                "seller_customs": 100,
                 "products": [
                     {
                         "product_id": 1,
                         "seller_id": 101,
                         "title": "테스트 상품",
                         "price": 100000,
+                        "category": "전자기기",
+                        "category_top": "디지털/가전",
+                        "condition": "중고",
+                        "description": "테스트 상품 설명",
+                        "view_count": 100,
+                        "like_count": 10,
+                        "chat_count": 5,
+                        "sell_method": "택배",
+                        "delivery_fee": "있음",
+                        "is_safe": "사용"
                     }
                 ]
             }
         ]
-        mock_search_products.return_value = mock_get_sellers.return_value
+        mock_get_sellers.return_value = mock_sellers_data
+        mock_search_products.return_value = mock_sellers_data
+        
+        # search_query에 keywords 설정하여 search_products_by_keywords가 호출되도록 함
+        mock_initial_state["search_query"] = {"keywords": ["아이폰", "프로"]}
         
         # LLM 에이전트 모킹 (dict 형태로 반환)
         with patch('server.workflow.agents.price_agent.create_agent') as mock_create:
