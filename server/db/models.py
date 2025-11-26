@@ -77,3 +77,29 @@ class Review(Base):
     seller_id = Column(Integer, index=True)  # 판매자 ID
     seller_name = Column(String)  # 판매자 이름 (참조용)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Conversation(Base):
+    """대화 세션"""
+
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    session_id = Column(String, unique=True, index=True)  # 세션 ID (UUID)
+    user_id = Column(String, index=True)  # 사용자 ID (선택사항, 익명 사용자 지원)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class Message(Base):
+    """대화 메시지"""
+
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    conversation_id = Column(Integer, index=True)  # 대화 세션 ID
+    session_id = Column(String, index=True)  # 세션 ID (조회용)
+    role = Column(String)  # "user" or "assistant"
+    content = Column(Text)  # 메시지 내용
+    metadata = Column(JSON)  # 추가 메타데이터 (user_input, recommendation_result 등)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

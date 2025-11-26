@@ -71,7 +71,16 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
     '에어팟 프로 2세대'
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [loadingMessageId, setLoadingMessageId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    // localStorage에서 세션 ID 복원 또는 새로 생성
+    const saved = localStorage.getItem('reco_session_id');
+    return saved || null;
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -80,6 +89,15 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 컴포넌트 언마운트 시 EventSource 정리
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
 
   // API 응답을 ProductCard 형식으로 변환
   const convertToProductCard = (result: RecommendationResult) => {
@@ -119,18 +137,27 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
     const searchQuery = inputValue;
     setInputValue('');
     setIsLoading(true);
+    setProgress(0);
+    setProgressMessage('워크플로우 시작');
 
     // 로딩 메시지 추가
+    const loadingMessageId = (Date.now() + 1).toString();
     const loadingMessage: Message = {
-      id: (Date.now() + 1).toString(),
+      id: loadingMessageId,
       type: 'bot',
       text: '분석 중입니다... 잠시만 기다려주세요.'
     };
+    setLoadingMessageId(loadingMessageId);
     setMessages(prev => [...prev, loadingMessage]);
 
+    // 기존 EventSource가 있으면 닫기
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
     try {
-      // FastAPI 호출
-      const response = await apiClient.recommendProducts({
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const userInput = {
         search_query: searchQuery,
         trust_safety: 50,
         quality_condition: 50,
@@ -141,30 +168,113 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
         location: null,
         price_min: null,
         price_max: null,
+        session_id: sessionId,  // 세션 ID 전달
+      };
+
+      // POST 요청으로 SSE 엔드포인트 호출
+      const response = await fetch(`${API_BASE_URL}/api/v1/recommend/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userInput),
       });
 
-      // 로딩 메시지 제거
-      setMessages(prev => prev.filter(msg => msg.id !== loadingMessage.id));
+      if (!response.ok) {
+        throw new Error(`SSE 연결 실패 (status: ${response.status})`);
+      }
 
-      // 응답 처리
-      const finalItems = response.final_item_scores || response.ranked_products || [];
-      
-      if (finalItems.length > 0) {
-        const products = finalItems.map(convertToProductCard);
-        const botMessage: Message = {
-          id: (Date.now() + 2).toString(),
-          type: 'bot',
-          text: `"${searchQuery}"에 대한 검색 결과를 찾았습니다. ${finalItems.length}개의 상품을 추천드립니다:`,
-          products: products
-        };
-        setMessages(prev => [...prev, botMessage]);
-      } else {
-        const botMessage: Message = {
-          id: (Date.now() + 2).toString(),
-          type: 'bot',
-          text: `죄송합니다. "${searchQuery}"에 대한 추천 상품을 찾지 못했습니다. 다른 키워드로 검색해보시겠어요?`
-        };
-        setMessages(prev => [...prev, botMessage]);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('스트림을 읽을 수 없습니다.');
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'progress') {
+                setProgress(data.progress);
+                setProgressMessage(data.message);
+                // 로딩 메시지 업데이트
+                if (loadingMessageId) {
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === loadingMessageId 
+                        ? { ...msg, text: `${data.message} (${data.progress}%)` }
+                        : msg
+                    )
+                  );
+                }
+              } else if (data.type === 'complete') {
+                setProgress(100);
+                setProgressMessage('추천 완료');
+                
+                // 세션 ID 저장
+                if (data.session_id && data.session_id !== sessionId) {
+                  setSessionId(data.session_id);
+                  localStorage.setItem('reco_session_id', data.session_id);
+                }
+                
+                // 로딩 메시지 제거
+                setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
+                setLoadingMessageId(null);
+
+                // 응답 처리
+                const finalItems = data.final_item_scores || [];
+                
+                if (finalItems.length > 0) {
+                  const products = finalItems.map(convertToProductCard);
+                  const botMessage: Message = {
+                    id: (Date.now() + 2).toString(),
+                    type: 'bot',
+                    text: `"${searchQuery}"에 대한 검색 결과를 찾았습니다. ${finalItems.length}개의 상품을 추천드립니다:`,
+                    products: products
+                  };
+                  setMessages(prev => [...prev, botMessage]);
+                } else {
+                  const botMessage: Message = {
+                    id: (Date.now() + 2).toString(),
+                    type: 'bot',
+                    text: `죄송합니다. "${searchQuery}"에 대한 추천 상품을 찾지 못했습니다. 다른 키워드로 검색해보시겠어요?`
+                  };
+                  setMessages(prev => [...prev, botMessage]);
+                }
+                setIsLoading(false);
+                return;
+              } else if (data.type === 'error') {
+                // 로딩 메시지 제거
+                setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
+                setLoadingMessageId(null);
+                
+                const errorMessage: Message = {
+                  id: (Date.now() + 2).toString(),
+                  type: 'bot',
+                  text: data.error_message || '오류가 발생했습니다.'
+                };
+                setMessages(prev => [...prev, errorMessage]);
+                setIsLoading(false);
+                return;
+              }
+            } catch (e) {
+              console.error('SSE 데이터 파싱 오류:', e);
+            }
+          }
+        }
       }
     } catch (error) {
       // 로딩 메시지 제거
@@ -179,9 +289,11 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
             : '오류가 발생했습니다. 서버 연결을 확인해주세요.'
       };
       setMessages(prev => [...prev, errorMessage]);
-      console.error('API 호출 오류:', error);
+      console.error('SSE 연결 오류:', error);
     } finally {
       setIsLoading(false);
+      setProgress(0);
+      setProgressMessage('');
     }
   };
 
@@ -239,6 +351,14 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
                       }`}
                     >
                       <p>{message.text}</p>
+                      {message.type === 'bot' && isLoading && message.id === loadingMessageId && progress > 0 && (
+                        <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-gradient-to-r from-emerald-600 to-teal-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 

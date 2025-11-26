@@ -34,10 +34,44 @@ app.include_router(history_router)
 # 데이터베이스 초기화
 
 
+async def warmup_workflow():
+    """워크플로우 및 LLM 클라이언트 warmup"""
+    try:
+        logger.info("워크플로우 warmup 시작...")
+        
+        # 워크플로우 앱 초기화 (싱글톤)
+        from server.routers.workflow import get_workflow_app
+        workflow_app = get_workflow_app()
+        logger.info("워크플로우 앱 초기화 완료")
+        
+        # LLM 클라이언트 warmup (각 Agent의 LLM 클라이언트 초기화)
+        from server.utils.llm_agent import create_agent
+        
+        # 각 에이전트 타입별로 LLM 클라이언트 생성 (초기화만, 실제 호출은 안 함)
+        agent_types = ["price_agent", "safety_agent", "final_matcher", "persona_classifier"]
+        for agent_type in agent_types:
+            try:
+                agent = create_agent(agent_type)
+                # LLM 클라이언트가 정상적으로 생성되었는지 확인
+                if agent.client is None:
+                    logger.warning(f"{agent_type} LLM 클라이언트 생성 실패 (API 키 없음)")
+                else:
+                    logger.info(f"{agent_type} LLM 클라이언트 초기화 완료")
+            except Exception as e:
+                logger.warning(f"{agent_type} 초기화 중 오류: {e}")
+        
+        logger.info("워크플로우 warmup 완료")
+    except Exception as e:
+        logger.error(f"워크플로우 warmup 실패: {e}", exc_info=True)
+
+
 @app.on_event("startup")
 async def startup():
     database.create_tables()
     logger.info("데이터베이스 초기화 완료")
+    
+    # Cold start 대비: 워크플로우 warmup
+    await warmup_workflow()
 
 
 @app.get("/")

@@ -29,6 +29,9 @@ def recommendation_workflow() -> StateGraph:
         # 페르소나 분류
         persona_classification = classify_persona(state["user_input"])
         state["persona_classification"] = persona_classification
+        
+        # user_input에 persona_type 추가 (agents에서 사용하기 위해)
+        state["user_input"]["persona_type"] = persona_classification.get("persona_type")
 
         # 검색 쿼리 생성
         search_query = generate_search_query(
