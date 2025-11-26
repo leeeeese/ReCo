@@ -3,7 +3,15 @@
 """
 
 from .database import Database
-from .models import Base
+from .models import (
+    Base,
+    History,
+    Product,
+    Seller,
+    Review,
+    Conversation,
+    Message,
+)
 from .schemas import *
 
-__all__ = ["Database", "Base"]
+__all__ = ["Database", "Base", "History", "Product", "Seller", "Review", "Conversation", "Message"]

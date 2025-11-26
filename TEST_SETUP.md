@@ -56,9 +56,44 @@ OPENAI_API_KEY=your_key_here  # LLM 테스트 시 필요 (모킹 사용 시 불�
 DATABASE_URL=sqlite:///./test_history.db  # 테스트 DB (자동 설정됨)
 ```
 
+## 서버 실행 필요 여부
+
+### 서버 없이 실행 가능한 테스트
+- ✅ 단위 테스트 (`pytest -m unit`)
+- ✅ 통합 테스트 (`pytest -m integration`)
+- ✅ API 테스트 (`pytest -m api`) - TestClient 사용
+
+### 서버 실행이 필요한 테스트
+- ⚠️ **E2E 테스트만** (`pytest -m e2e`) - 실제 브라우저 사용
+
+### E2E 테스트 실행 전 준비
+
+E2E 테스트를 실행하려면 다음 서버들이 실행 중이어야 합니다:
+
+**터미널 1: 백엔드 서버**
+```bash
+cd server
+python main.py
+# 또는
+uvicorn server.main:app --reload --port 8000
+```
+
+**터미널 2: 프론트엔드 서버**
+```bash
+cd app/frontend
+npm run dev
+# 포트 3000에서 실행
+```
+
+**터미널 3: E2E 테스트 실행**
+```bash
+pytest -m e2e
+```
+
 ## 주의사항
 
 1. **LLM 호출**: 대부분의 테스트는 LLM 호출을 모킹하므로 실제 API 키가 필요하지 않습니다.
 2. **데이터베이스**: 테스트는 별도의 테스트 DB를 사용하며, 테스트 후 자동으로 정리됩니다.
-3. **E2E 테스트**: 프론트엔드와 백엔드 서버가 실행 중이어야 합니다.
+3. **E2E 테스트**: 프론트엔드(포트 3000)와 백엔드(포트 8000) 서버가 실행 중이어야 합니다.
+4. **일반 테스트**: 단위/통합/API 테스트는 서버 없이 실행 가능합니다.
 

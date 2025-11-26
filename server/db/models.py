@@ -101,5 +101,5 @@ class Message(Base):
     session_id = Column(String, index=True)  # 세션 ID (조회용)
     role = Column(String)  # "user" or "assistant"
     content = Column(Text)  # 메시지 내용
-    metadata = Column(JSON)  # 추가 메타데이터 (user_input, recommendation_result 등)
+    message_metadata = Column(JSON)  # 추가 메타데이터 (user_input, recommendation_result 등) - metadata는 SQLAlchemy 예약어
     created_at = Column(DateTime(timezone=True), server_default=func.now())

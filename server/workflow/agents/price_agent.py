@@ -145,8 +145,22 @@ class PriceAgent:
             format="json"
         )
 
+        # LLM 결과를 dict 형태로 변환 (seller_id를 key로 사용)
+        recommended_sellers_raw = decision.get("recommended_sellers", {})
+        if isinstance(recommended_sellers_raw, list):
+            # list 형태인 경우 dict로 변환
+            recommended_sellers_dict = {}
+            for item in recommended_sellers_raw:
+                seller_id = item.get("seller_id")
+                if seller_id:
+                    recommended_sellers_dict[str(seller_id)] = item
+            recommended_sellers_by_price = recommended_sellers_dict
+        else:
+            # 이미 dict 형태인 경우 그대로 사용
+            recommended_sellers_by_price = recommended_sellers_raw if isinstance(recommended_sellers_raw, dict) else {}
+
         return {
-            "recommended_sellers_by_price": decision.get("recommended_sellers", []),
+            "recommended_sellers_by_price": recommended_sellers_by_price,
             "price_reasoning": decision.get("reasoning", ""),
             "market_analysis": market_prices,
             "recommendation_score": decision.get("confidence", 0.5)

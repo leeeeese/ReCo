@@ -62,7 +62,7 @@ def add_message(
             session_id=session_id,
             role=role,
             content=content,
-            metadata=metadata or {}
+            message_metadata=metadata or {}
         )
         db.add(message)
         db.commit()
@@ -95,7 +95,7 @@ def get_conversation_context(session_id: str, limit: int = 10) -> Dict[str, Any]
             {
                 "role": msg.role,
                 "content": msg.content,
-                "metadata": msg.metadata or {}
+                "metadata": msg.message_metadata or {}
             }
             for msg in recent_messages
         ],
@@ -106,9 +106,9 @@ def get_conversation_context(session_id: str, limit: int = 10) -> Dict[str, Any]
     # 이전 추천 결과 추출
     previous_recommendations = []
     for msg in recent_messages:
-        if msg.role == "assistant" and msg.metadata:
-            if "recommendation_result" in msg.metadata:
-                previous_recommendations.append(msg.metadata["recommendation_result"])
+        if msg.role == "assistant" and msg.message_metadata:
+            if "recommendation_result" in msg.message_metadata:
+                previous_recommendations.append(msg.message_metadata["recommendation_result"])
     
     if previous_recommendations:
         context["previous_recommendations"] = previous_recommendations

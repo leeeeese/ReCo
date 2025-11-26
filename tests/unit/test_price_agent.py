@@ -93,29 +93,50 @@ class TestPriceAgentNode:
     """가격 에이전트 노드 테스트"""
     
     @patch('server.workflow.agents.price_agent.search_products_by_keywords')
-    def test_price_agent_node_success(self, mock_search_products, mock_initial_state):
+    @patch('server.workflow.agents.price_agent.get_sellers_with_products')
+    def test_price_agent_node_success(self, mock_get_sellers, mock_search_products, mock_initial_state):
         """가격 에이전트 노드 성공 테스트"""
-        mock_search_products.return_value = [
+        # get_sellers_with_products 형식으로 반환 (seller별로 그룹화)
+        mock_get_sellers.return_value = [
             {
-                "product_id": 1,
                 "seller_id": 101,
-                "title": "테스트 상품",
-                "price": 100000,
+                "seller_name": "테스트 판매자",
+                "products": [
+                    {
+                        "product_id": 1,
+                        "seller_id": 101,
+                        "title": "테스트 상품",
+                        "price": 100000,
+                    }
+                ]
             }
         ]
+        mock_search_products.return_value = mock_get_sellers.return_value
         
-        # LLM 에이전트 모킹
+        # LLM 에이전트 모킹 (dict 형태로 반환)
         with patch('server.workflow.agents.price_agent.create_agent') as mock_create:
             mock_agent = Mock()
             mock_agent.decide = Mock(return_value={
-                "recommended_sellers": [{"seller_id": 101}],
+                "recommended_sellers": {
+                    "101": {
+                        "seller_id": 101,
+                        "score": 0.8,
+                        "reasoning": "합리적인 가격",
+                        "price_range": {"min": 90000, "max": 110000}
+                    }
+                },
                 "reasoning": "테스트",
+                "confidence": 0.8
             })
             mock_create.return_value = mock_agent
             
-            result = price_agent_node(mock_initial_state)
-            
-            assert result["current_step"] in ["price_analyzed", "error"]
-            if result["current_step"] == "price_analyzed":
-                assert "price_agent_recommendations" in result
+            # joongna_search_prices 모킹
+            with patch('server.workflow.agents.price_agent.joongna_search_prices') as mock_joongna:
+                mock_joongna.return_value = [95000, 100000, 105000]
+                
+                result = price_agent_node(mock_initial_state)
+                
+                assert result["current_step"] in ["price_analyzed", "error"]
+                if result["current_step"] == "price_analyzed":
+                    assert "price_agent_recommendations" in result
 

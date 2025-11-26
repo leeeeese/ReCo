@@ -69,29 +69,55 @@ class TestSafetyAgentNode:
     """안전거래 에이전트 노드 테스트"""
     
     @patch('server.workflow.agents.safety_agent.get_sellers_with_products')
-    def test_safety_agent_node_success(self, mock_get_sellers, mock_initial_state):
+    @patch('server.workflow.agents.safety_agent.search_products_by_keywords')
+    def test_safety_agent_node_success(self, mock_search_products, mock_get_sellers, mock_initial_state):
         """안전거래 에이전트 노드 성공 테스트"""
-        mock_get_sellers.return_value = [
+        # get_sellers_with_products 형식으로 반환 (seller별로 그룹화)
+        sellers_data = [
             {
-                "product_id": 1,
                 "seller_id": 101,
-                "title": "테스트 상품",
-                "price": 100000,
+                "seller_name": "테스트 판매자",
+                "products": [
+                    {
+                        "product_id": 1,
+                        "seller_id": 101,
+                        "title": "테스트 상품",
+                        "price": 100000,
+                    }
+                ]
             }
         ]
+        mock_get_sellers.return_value = sellers_data
+        mock_search_products.return_value = sellers_data
         
-        # LLM 에이전트 모킹
+        # LLM 에이전트 모킹 (dict 형태로 반환)
         with patch('server.workflow.agents.safety_agent.create_agent') as mock_create:
             mock_agent = Mock()
             mock_agent.decide = Mock(return_value={
-                "recommended_sellers": [{"seller_id": 101}],
+                "recommended_sellers": {
+                    "101": {
+                        "seller_id": 101,
+                        "score": 0.85,
+                        "reasoning": "안전한 거래",
+                        "matched_features": ["안전결제", "인증판매자"],
+                        "trust_level": "high"
+                    }
+                },
                 "reasoning": "테스트",
             })
             mock_create.return_value = mock_agent
             
-            result = safety_agent_node(mock_initial_state)
-            
-            assert result["current_step"] in ["safety_analyzed", "error"]
-            if result["current_step"] == "safety_analyzed":
-                assert "safety_agent_recommendations" in result
+            # tool 함수들 모킹
+            with patch('server.workflow.agents.safety_agent.seller_profile_tool') as mock_seller_tool, \
+                 patch('server.workflow.agents.safety_agent.review_feature_tool') as mock_review_tool, \
+                 patch('server.workflow.agents.safety_agent.trade_risk_tool') as mock_trade_risk:
+                mock_seller_tool.return_value = {"seller_trust_score": 80.0}
+                mock_review_tool.return_value = {"positive_keywords": ["신뢰"]}
+                mock_trade_risk.return_value = {"risk_score": 0.2}
+                
+                result = safety_agent_node(mock_initial_state)
+                
+                assert result["current_step"] in ["safety_analyzed", "error"]
+                if result["current_step"] == "safety_analyzed":
+                    assert "safety_agent_recommendations" in result
 
