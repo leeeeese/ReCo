@@ -69,12 +69,25 @@ class TestOrchestratorAgentNode:
     
     def test_orchestrator_agent_node_success(self, mock_initial_state):
         """오케스트레이터 에이전트 노드 성공 테스트"""
-        # 이전 에이전트 결과 설정
+        # 이전 에이전트 결과 설정 (실제 구조에 맞게)
+        test_product = {"product_id": 1, "seller_id": 101, "title": "테스트", "price": 100000}
         mock_initial_state["price_agent_recommendations"] = {
-            "recommended_sellers": [{"seller_id": 101}],
+            "recommended_sellers": [{
+                "seller_id": 101,
+                "seller_name": "테스트 판매자",
+                "price_score": 0.8,
+                "price_reasoning": "합리적",
+                "products": [test_product]
+            }],
         }
         mock_initial_state["safety_agent_recommendations"] = {
-            "recommended_sellers": [{"seller_id": 101}],
+            "recommended_sellers": [{
+                "seller_id": 101,
+                "seller_name": "테스트 판매자",
+                "safety_score": 0.85,
+                "safety_reasoning": "안전함",
+                "products": [test_product]
+            }],
         }
         mock_initial_state["persona_classification"] = {
             "persona_type": "balanced",
@@ -84,21 +97,22 @@ class TestOrchestratorAgentNode:
         with patch('server.workflow.agents.orchestrator_agent.create_agent') as mock_create:
             mock_agent = Mock()
             mock_agent.analyze_and_combine = Mock(return_value={
-                "recommended_seller_ids": [101],
+                "final_recommendations": {
+                    "seller_ids": [101],
+                    "scores": {
+                        "101": {"score": 0.8, "reasoning": "테스트"}
+                    }
+                },
+                "reasoning": "통합 추천"
             })
             mock_agent.decide = Mock(return_value={
-                "ranked_items": [{"product_id": 1}],
+                "ranked_product_ids": [1],
             })
             mock_create.return_value = mock_agent
             
-            with patch('server.workflow.agents.orchestrator_agent.get_sellers_with_products') as mock_get:
-                mock_get.return_value = [
-                    {"product_id": 1, "seller_id": 101, "title": "테스트", "price": 100000}
-                ]
-                
-                result = orchestrator_agent_node(mock_initial_state)
-                
-                assert result["current_step"] in ["recommendation_completed", "error"]
-                if result["current_step"] == "recommendation_completed":
-                    assert "final_seller_recommendations" in result or "final_item_scores" in result
+            result = orchestrator_agent_node(mock_initial_state)
+            
+            assert result["current_step"] in ["recommendation_completed", "error"]
+            if result["current_step"] == "recommendation_completed":
+                assert "final_seller_recommendations" in result or "final_item_scores" in result
 
