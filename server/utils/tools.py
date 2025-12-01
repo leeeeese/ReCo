@@ -127,3 +127,175 @@ def calculate_diversity_score(items: List[Dict[str, Any]], key: str) -> float:
         return 0.0
     unique_count = len(set(item.get(key) for item in items if key in item))
     return unique_count / len(items) if items else 0.0
+
+
+# ==================== 상품 매칭 룰베이스 ====================
+
+def match_products_to_sellers(
+    recommended_sellers: List[Dict[str, Any]],
+    user_input: Dict[str, Any],
+    persona_classification: Optional[Dict[str, Any]] = None,
+    max_products_per_seller: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    추천된 판매자들에게 상품을 매칭하는 룰베이스 함수
+    
+    Args:
+        recommended_sellers: 추천된 판매자 리스트 (seller_id 포함)
+        user_input: 사용자 입력 (search_query, price_min, price_max 등)
+        persona_classification: 페르소나 분류 결과
+        max_products_per_seller: 판매자당 최대 상품 수
+    
+    Returns:
+        판매자 정보와 매칭된 상품 리스트가 포함된 딕셔너리 리스트
+    """
+    from server.db.product_service import get_products_by_seller_ids
+    
+    if not recommended_sellers:
+        return []
+    
+    # 판매자 ID 추출
+    seller_ids = [seller.get("seller_id") for seller in recommended_sellers if seller.get("seller_id")]
+    
+    if not seller_ids:
+        return []
+    
+    # DB에서 상품 조회
+    sellers_with_products = get_products_by_seller_ids(
+        seller_ids=seller_ids,
+        limit=max_products_per_seller
+    )
+    
+    # 판매자 ID로 인덱싱
+    sellers_dict = {str(seller["seller_id"]): seller for seller in sellers_with_products}
+    
+    # 추천된 판매자 순서대로 정렬하고 상품 매칭
+    matched_results = []
+    for seller in recommended_sellers:
+        seller_id = seller.get("seller_id")
+        seller_id_str = str(seller_id)
+        
+        # DB에서 조회한 판매자 정보 가져오기
+        seller_data = sellers_dict.get(seller_id_str, {})
+        
+        # 상품 필터링 (사용자 입력 조건에 맞는 상품만)
+        products = seller_data.get("products", [])
+        filtered_products = _filter_products_by_user_input(products, user_input)
+        
+        # 상품 점수 계산 및 정렬
+        scored_products = []
+        for product in filtered_products[:max_products_per_seller]:
+            product_score = _calculate_product_match_score(
+                product, 
+                seller, 
+                user_input, 
+                persona_classification
+            )
+            scored_products.append({
+                **product,
+                "match_score": product_score,
+                "seller_id": seller_id,
+                "seller_name": seller.get("seller_name"),
+                "seller_price_score": seller.get("price_score", 0.0),
+                "seller_safety_score": seller.get("safety_score", 0.0),
+                "seller_final_score": seller.get("final_score", 0.0),
+            })
+        
+        # 점수 순으로 정렬
+        scored_products.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        matched_results.append({
+            **seller,
+            "products": scored_products,
+        })
+    
+    return matched_results
+
+
+def _filter_products_by_user_input(
+    products: List[Dict[str, Any]], 
+    user_input: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """사용자 입력 조건에 맞는 상품만 필터링"""
+    filtered = []
+    
+    price_min = user_input.get("price_min")
+    price_max = user_input.get("price_max")
+    category = user_input.get("category")
+    search_query = user_input.get("search_query", "")
+    
+    for product in products:
+        # 가격 필터
+        if price_min is not None and product.get("price", 0) < price_min:
+            continue
+        if price_max is not None and product.get("price", 0) > price_max:
+            continue
+        
+        # 카테고리 필터
+        if category and product.get("category") != category:
+            continue
+        
+        # 검색어 필터 (제목/설명에 포함)
+        if search_query:
+            query_lower = search_query.lower()
+            title = product.get("title", "").lower()
+            description = product.get("description", "").lower()
+            if query_lower not in title and query_lower not in description:
+                continue
+        
+        filtered.append(product)
+    
+    return filtered
+
+
+def _calculate_product_match_score(
+    product: Dict[str, Any],
+    seller: Dict[str, Any],
+    user_input: Dict[str, Any],
+    persona_classification: Optional[Dict[str, Any]] = None
+) -> float:
+    """상품 매칭 점수 계산 (룰베이스)"""
+    score = 0.0
+    
+    # 1. 판매자 최종 점수 (40%)
+    seller_score = seller.get("final_score", 0.0)
+    score += 0.4 * seller_score
+    
+    # 2. 상품 피처 점수 (30%)
+    product_feature_score = calculate_product_feature_score(product)
+    score += 0.3 * product_feature_score
+    
+    # 3. 가격 적합성 (20%)
+    price = product.get("price", 0)
+    price_min = user_input.get("price_min")
+    price_max = user_input.get("price_max")
+    
+    if price_min is not None and price_max is not None:
+        price_range = price_max - price_min
+        if price_range > 0:
+            # 가격 범위 중간값에 가까울수록 높은 점수
+            mid_price = (price_min + price_max) / 2
+            price_distance = abs(price - mid_price) / price_range
+            price_score = 1.0 - min(price_distance, 1.0)
+        else:
+            price_score = 1.0 if price_min <= price <= price_max else 0.0
+    else:
+        price_score = 0.5  # 가격 범위가 없으면 중간 점수
+    
+    score += 0.2 * price_score
+    
+    # 4. 페르소나 기반 보너스 (10%)
+    if persona_classification:
+        persona_type = persona_classification.get("persona_type", "")
+        # 페르소나에 맞는 상품 조건 체크
+        if persona_type == "quality_seeker":
+            condition = product.get("condition", "")
+            if condition in ["새상품", "거의새것"]:
+                score += 0.1
+        elif persona_type == "price_sensitive":
+            # 가격이 낮을수록 보너스
+            if price_min and price_max:
+                price_ratio = (price - price_min) / (price_max - price_min) if price_max > price_min else 0.5
+                score += 0.1 * (1.0 - price_ratio)
+    
+    return min(score, 1.0)

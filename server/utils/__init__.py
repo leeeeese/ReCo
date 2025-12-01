@@ -13,6 +13,7 @@ from .tools import (
     calculate_product_feature_score,
     normalize_scores,
     calculate_diversity_score,
+    match_products_to_sellers,
 )
 
 from .mock_data import (
@@ -39,6 +40,7 @@ __all__ = [
     "calculate_product_feature_score",
     "normalize_scores",
     "calculate_diversity_score",
+    "match_products_to_sellers",
     # Mock Data
     "get_mock_user_input",
     "get_mock_sellers_with_products",
