@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from server.routers import workflow_router, history_router
 from server.db.database import database
 from server.utils.logger import setup_logging, get_logger
+from server.middleware.rate_limit import RateLimitMiddleware
+from server.utils.config import PORT, HOST
+import os
 
 setup_logging()
 logger = get_logger(__name__)
@@ -25,6 +28,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Rate Limiting 미들웨어 추가
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_hour=int(os.getenv("RATE_LIMIT_PER_HOUR", "100")),
+    window_seconds=int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600")),
+    enable_user_limit=os.getenv("RATE_LIMIT_ENABLE_USER", "true").lower() == "true",
+    enable_ip_limit=os.getenv("RATE_LIMIT_ENABLE_IP", "true").lower() == "true",
 )
 
 # 라우터 등록
@@ -67,8 +79,18 @@ async def warmup_workflow():
 
 @app.on_event("startup")
 async def startup():
+    # 환경 변수 검증은 이미 config.py에서 수행됨
+    logger.info("환경 변수 검증 완료")
+    
     database.create_tables()
     logger.info("데이터베이스 초기화 완료")
+    
+    # 캐시 시스템 초기화 확인
+    from server.utils.cache import cache_manager
+    if cache_manager.use_redis:
+        logger.info("Redis 캐시 시스템 활성화")
+    else:
+        logger.info("In-memory 캐시 시스템 사용")
     
     # Cold start 대비: 워크플로우 warmup
     await warmup_workflow()
@@ -87,7 +109,7 @@ async def root():
 if __name__ == "__main__":
     uvicorn.run(
         "server.main:app",
-        host="0.0.0.0",
-        port=8000,
+        host=HOST,
+        port=PORT,
         reload=True
     )
