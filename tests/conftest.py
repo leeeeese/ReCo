@@ -10,6 +10,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# 환경 변수 설정 (테스트용)
+# config.py의 검증을 통과하기 위해 필수 환경 변수 설정
+os.environ.setdefault("OPENAI_API_KEY", "test-key-for-testing")
+
 from server.main import app
 from server.db import database as db_module
 from server.workflow.state import RecommendationState
@@ -41,7 +45,9 @@ def test_db():
     db_module.SessionLocal = TestingSessionLocal
     Base = db_module.Base
 
-    # 3) 스키마 생성
+    # 3) 스키마 생성 (모든 모델 포함)
+    # RecommendationLog 모델도 포함되도록 모든 모델 import 확인
+    from server.db.models import RecommendationLog
     Base.metadata.create_all(bind=test_engine)
 
     yield

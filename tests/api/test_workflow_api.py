@@ -11,14 +11,14 @@ from server.main import app
 class TestWorkflowAPI:
     """워크플로우 API 엔드포인트 테스트"""
     
-    def test_health_check(self, client):
-        """헬스 체크 엔드포인트 테스트"""
-        response = client.get("/api/v1/health")
+    def test_root_endpoint(self, client):
+        """루트 엔드포인트 테스트"""
+        response = client.get("/")
         
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "healthy"
-        assert "service" in data
+        assert "message" in data
+        assert "version" in data
     
     @pytest.mark.slow
     def test_recommend_endpoint(self, client, mock_user_input):
@@ -30,18 +30,35 @@ class TestWorkflowAPI:
             mock_app.invoke = Mock(return_value={
                 "user_input": mock_user_input,
                 "persona_classification": {"persona_type": "balanced"},
+                "final_seller_recommendations": [
+                    {
+                        "seller_id": 101,
+                        "seller_name": "테스트 판매자",
+                        "price_score": 0.8,
+                        "safety_score": 0.85,
+                        "final_score": 0.82,
+                        "products": [
+                            {
+                                "product_id": 1,
+                                "seller_id": 101,
+                                "title": "테스트 상품",
+                                "price": 100000,
+                                "match_score": 0.85,
+                            }
+                        ]
+                    }
+                ],
                 "final_item_scores": [
                     {
                         "product_id": 1,
                         "seller_id": 101,
                         "title": "테스트 상품",
                         "price": 100000,
-                        "final_score": 0.85,
-                        "ranking_factors": {},
+                        "match_score": 0.85,
                         "seller_name": "테스트 판매자",
-                        "category": "전자기기",
-                        "condition": "중고",
-                        "location": "서울",
+                        "seller_price_score": 0.8,
+                        "seller_safety_score": 0.85,
+                        "seller_final_score": 0.82,
                     }
                 ],
                 "current_step": "recommendation_completed",

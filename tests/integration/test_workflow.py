@@ -75,15 +75,31 @@ class TestRecommendationWorkflow:
 
         # orchestrator_agent_node 도 LLM 안 타고 최종 결과만 합성하도록 mock
         # user_input은 변경하지 않으므로 반환하지 않음
+        # 이제는 상품 매칭도 룰베이스로 처리되므로 products 포함된 판매자 리스트 반환
         def orchestrator_side_effect(state: RecommendationState):
             return {
                 "final_seller_recommendations": [
-                    {"seller_id": 101, "score": 0.82, "reasoning": "통합 테스트"}
+                    {
+                        "seller_id": 101,
+                        "seller_name": "테스트 판매자",
+                        "price_score": 0.8,
+                        "safety_score": 0.85,
+                        "final_score": 0.82,
+                        "final_reasoning": "통합 테스트",
+                        "products": [test_product]  # 룰베이스로 매칭된 상품
+                    }
                 ],
                 "final_item_scores": [
-                    {"product_id": 1, "score": 0.82, "reasoning": "테스트용 최종 아이템"}
+                    {
+                        **test_product,
+                        "match_score": 0.82,
+                        "seller_name": "테스트 판매자",
+                        "seller_price_score": 0.8,
+                        "seller_safety_score": 0.85,
+                        "seller_final_score": 0.82,
+                    }
                 ],
-                "ranking_explanation": "테스트용 랭킹 결과",
+                "ranking_explanation": "LLM 기반 판매자 추천 완료, 상품 매칭은 룰베이스로 처리",
                 "current_step": "recommendation_completed",
                 "completed_steps": ["recommendation"],  # add reducer 사용
             }
@@ -192,14 +208,30 @@ class TestRecommendationWorkflow:
         def orchestrator_side_effect(state: RecommendationState):
             # init 테스트에서는 너무 세게 검증 안 하고, 기본 결과만 채워줌
             # user_input은 변경하지 않으므로 반환하지 않음
+            # 이제는 상품 매칭도 룰베이스로 처리되므로 products 포함된 판매자 리스트 반환
             return {
                 "final_seller_recommendations": [
-                    {"seller_id": 101, "score": 0.8, "reasoning": "init 테스트"}
+                    {
+                        "seller_id": 101,
+                        "seller_name": "테스트 판매자",
+                        "price_score": 0.75,
+                        "safety_score": 0.9,
+                        "final_score": 0.8,
+                        "final_reasoning": "init 테스트",
+                        "products": [test_product]  # 룰베이스로 매칭된 상품
+                    }
                 ],
                 "final_item_scores": [
-                    {"product_id": 1, "score": 0.8, "reasoning": "init 테스트"}
+                    {
+                        **test_product,
+                        "match_score": 0.8,
+                        "seller_name": "테스트 판매자",
+                        "seller_price_score": 0.75,
+                        "seller_safety_score": 0.9,
+                        "seller_final_score": 0.8,
+                    }
                 ],
-                "ranking_explanation": "테스트용 랭킹 결과",
+                "ranking_explanation": "LLM 기반 판매자 추천 완료, 상품 매칭은 룰베이스로 처리",
                 "current_step": "recommendation_completed",
                 "completed_steps": ["recommendation"],  # add reducer 사용
             }

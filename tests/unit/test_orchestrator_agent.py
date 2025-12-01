@@ -19,7 +19,7 @@ class TestOrchestratorAgent:
         
         assert agent.llm_agent is not None
         assert agent.combine_sellers_prompt is not None
-        assert agent.rank_products_prompt is not None
+        # rank_products_prompt는 제거됨 (상품 매칭은 룰베이스로 처리)
     
     def test_combine_and_rank(self):
         """결과 통합 및 랭킹 테스트"""
@@ -58,15 +58,14 @@ class TestOrchestratorAgent:
             },
             "reasoning": "통합 추천",
         })
-        agent.llm_agent.decide = Mock(return_value={
-            "ranked_product_ids": [1],
-        })
         
         result = agent.combine_and_rank(
             price_results, safety_results, user_input, persona_classification
         )
         
-        assert "final_seller_recommendations" in result or "ranked_products" in result
+        # 이제는 final_seller_recommendations만 반환 (상품 매칭은 룰베이스로 처리)
+        assert "final_seller_recommendations" in result
+        assert len(result["final_seller_recommendations"]) <= 10  # 상위 10명만
 
 
 @pytest.mark.unit
@@ -100,8 +99,10 @@ class TestOrchestratorAgentNode:
             "persona_type": "balanced",
         }
         
-        # LLM 에이전트 모킹
-        with patch('server.workflow.agents.orchestrator_agent.create_agent') as mock_create:
+        # LLM 에이전트 및 상품 매칭 룰베이스 모킹
+        with patch('server.workflow.agents.orchestrator_agent.create_agent') as mock_create, \
+             patch('server.workflow.agents.orchestrator_agent.match_products_to_sellers') as mock_match:
+            
             mock_agent = Mock()
             mock_agent.analyze_and_combine = Mock(return_value={
                 "final_recommendations": {
@@ -112,14 +113,26 @@ class TestOrchestratorAgentNode:
                 },
                 "reasoning": "통합 추천"
             })
-            mock_agent.decide = Mock(return_value={
-                "ranked_product_ids": [1],
-            })
             mock_create.return_value = mock_agent
+            
+            # 상품 매칭 룰베이스 모킹
+            mock_match.return_value = [
+                {
+                    "seller_id": 101,
+                    "seller_name": "테스트 판매자",
+                    "price_score": 0.8,
+                    "safety_score": 0.85,
+                    "final_score": 0.82,
+                    "products": [test_product]
+                }
+            ]
             
             result = orchestrator_agent_node(mock_initial_state)
             
             assert result["current_step"] in ["recommendation_completed", "error"]
             if result["current_step"] == "recommendation_completed":
-                assert "final_seller_recommendations" in result or "final_item_scores" in result
+                assert "final_seller_recommendations" in result
+                assert "final_item_scores" in result
+                # 판매자 10명 이하인지 확인
+                assert len(result["final_seller_recommendations"]) <= 10
 
