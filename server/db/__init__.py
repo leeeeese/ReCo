@@ -11,7 +11,18 @@ from .models import (
     Review,
     Conversation,
     Message,
+    RecommendationLog,
 )
 from .schemas import *
 
-__all__ = ["Database", "Base", "History", "Product", "Seller", "Review", "Conversation", "Message"]
+__all__ = [
+    "Database",
+    "Base",
+    "History",
+    "Product",
+    "Seller",
+    "Review",
+    "Conversation",
+    "Message",
+    "RecommendationLog",
+]

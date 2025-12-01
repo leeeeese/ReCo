@@ -103,3 +103,19 @@ class Message(Base):
     content = Column(Text)  # 메시지 내용
     message_metadata = Column(JSON)  # 추가 메타데이터 (user_input, recommendation_result 등) - metadata는 SQLAlchemy 예약어
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class RecommendationLog(Base):
+    """에이전트 추천 결과 로그 (평가용)"""
+
+    __tablename__ = "recommendation_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    buyer_id = Column(String, index=True)  # 구매자 ID (reviewer_id)
+    user_input = Column(JSON)  # 사용자 입력 (검색 쿼리, 선호도 등)
+    recommended_seller_ids = Column(JSON)  # 추천된 판매자 ID 리스트 (상위 10개)
+    recommended_sellers = Column(JSON)  # 추천된 판매자 상세 정보
+    ground_truth_seller_id = Column(Integer, index=True)  # 정답 판매자 ID (answer_data에서)
+    is_correct = Column(Integer, default=0)  # 정답 여부 (0: 오답, 1: 정답)
+    rank = Column(Integer)  # 정답 판매자가 추천 리스트에서 몇 번째인지 (없으면 None)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
