@@ -189,7 +189,13 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
 
             if not sellers_with_products:
                 # 필터를 완화하여 재시도
-                logger.warning("검색 조건으로 상품을 찾지 못해 필터를 완화하여 재시도")
+                logger.warning(
+                    "검색 조건으로 상품을 찾지 못해 필터를 완화하여 재시도",
+                    extra={
+                        "original_keywords": keywords,
+                        "original_search_query": search_query_obj,
+                    }
+                )
                 sellers_with_products = get_sellers_with_products(
                     search_query=None,  # 검색어 제거
                     category=None,  # 카테고리 제거
@@ -200,7 +206,18 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
                 )
                 
                 if not sellers_with_products:
-                    raise ValueError("DB에 상품 데이터가 없거나 검색 조건이 너무 엄격합니다.")
+                    # DB에 상품이 있는지 확인
+                    from server.db.database import SessionLocal
+                    from server.db.models import Product
+                    db = SessionLocal()
+                    try:
+                        total_count = db.query(Product).count()
+                        if total_count == 0:
+                            raise ValueError("DB에 상품 데이터가 없습니다. CSV 파일을 먼저 마이그레이션해주세요.")
+                        else:
+                            raise ValueError(f"검색 조건이 너무 엄격합니다. (DB에 총 {total_count}개 상품 존재)")
+                    finally:
+                        db.close()
         except Exception as e:
             logger.exception("안전거래 에이전트 DB 조회 실패")
             raise ValueError(f"안전거래 에이전트 데이터 조회 실패: {str(e)}")

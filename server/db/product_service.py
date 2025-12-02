@@ -37,6 +37,11 @@ def get_sellers_with_products(
     db: Session = SessionLocal()
 
     try:
+        # DB에 상품이 있는지 먼저 확인
+        total_product_count = db.query(Product).count()
+        if total_product_count == 0:
+            return []  # DB에 상품이 없으면 빈 리스트 반환
+        
         # 기본 쿼리: Product와 Seller 조인
         query = db.query(Product, Seller).join(
             Seller, Product.seller_id == Seller.seller_id
@@ -46,11 +51,12 @@ def get_sellers_with_products(
         filters = []
 
         if search_query:
-            search_term = f"%{search_query}%"
+            # 대소문자 구분 없이 부분 문자열 검색 (SQLite는 ilike 미지원)
+            search_query_lower = search_query.lower()
             filters.append(
                 or_(
-                    Product.title.contains(search_query),
-                    Product.description.contains(search_query)
+                    func.lower(Product.title).contains(search_query_lower),
+                    func.lower(Product.description).contains(search_query_lower)
                 )
             )
 
@@ -195,8 +201,19 @@ def search_products_by_keywords(
     Returns:
         판매자별로 그룹화된 상품 리스트
     """
-    # 키워드를 공백으로 연결하여 검색
-    search_query = " ".join(keywords) if keywords else None
+    if not keywords:
+        # 키워드가 없으면 필터만 적용하여 조회
+        return get_sellers_with_products(
+            search_query=None,
+            category=category,
+            price_min=price_min,
+            price_max=price_max,
+            limit=limit
+        )
+    
+    # 키워드가 하나면 그대로 사용, 여러 개면 공백으로 연결
+    # 짧은 단어도 검색되도록 개선
+    search_query = " ".join(keywords) if len(keywords) > 1 else keywords[0]
 
     return get_sellers_with_products(
         search_query=search_query,

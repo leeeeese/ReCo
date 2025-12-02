@@ -12,12 +12,18 @@ from server.workflow.state import PersonaVector, PersonaType, MATCHING_WEIGHTS
 # ==================== 텍스트 처리 Tools ====================
 
 def extract_keywords(query: str) -> List[str]:
-    """검색 쿼리에서 키워드 추출"""
-    keywords = re.findall(r'\b\w+\b', query.lower())
+    """검색 쿼리에서 키워드 추출 (한글 포함)"""
+    if not query:
+        return []
+    
+    # 한글, 영문, 숫자를 포함한 키워드 추출
+    # \w는 한글을 포함하지 않을 수 있으므로 명시적으로 패턴 정의
+    keywords = re.findall(r'[가-힣a-zA-Z0-9]+', query.lower())
     stop_words = {'의', '을', '를', '이', '가', '은', '는', '에',
                   '에서', '로', '으로', '와', '과', '도', '만', '까지', '부터'}
-    keywords = [kw for kw in keywords if kw not in stop_words and len(kw) > 1]
-    return keywords
+    # 1글자 키워드도 허용 (예: '아이폰' 같은 경우)
+    keywords = [kw for kw in keywords if kw not in stop_words and len(kw) >= 1]
+    return keywords if keywords else [query.strip()]  # 키워드가 없으면 원본 쿼리 반환
 
 
 def enhance_query_for_persona(original_query: str, persona_type: PersonaType) -> str:
