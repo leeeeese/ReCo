@@ -100,18 +100,53 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
   }, []);
 
   // API 응답을 ProductCard 형식으로 변환
-  const convertToProductCard = (result: RecommendationResult) => {
+  const convertToProductCard = (result: any) => {
+    // 백엔드 응답 구조에 맞게 필드 추출
     const rankingFactors = result.ranking_factors || {};
-    const reasonValue = rankingFactors.reasoning || rankingFactors.reason || '추천 상품입니다.';
+    
+    // 추천 이유 추출 (여러 소스에서 시도)
+    // 1. 판매자 추천 이유 (seller_final_reasoning, combination_explanation 등)
+    // 2. 상품 매칭 점수 기반 설명
+    // 3. 기본 메시지
+    let reasonValue = 
+      result.final_reasoning || 
+      result.seller_final_reasoning ||
+      result.combination_explanation ||
+      result.reasoning ||
+      rankingFactors.reasoning || 
+      rankingFactors.reason;
+    
+    // 추천 이유가 없으면 점수 기반으로 생성
+    if (!reasonValue) {
+      const matchScore = result.match_score;
+      const sellerScore = result.seller_final_score;
+      
+      if (matchScore && !isNaN(matchScore)) {
+        const scorePercent = Math.round(matchScore * 100);
+        reasonValue = `매칭 점수 ${scorePercent}점`;
+        if (sellerScore && !isNaN(sellerScore)) {
+          reasonValue += ` (판매자 점수: ${Math.round(sellerScore * 100)}점)`;
+        }
+      } else if (sellerScore && !isNaN(sellerScore)) {
+        reasonValue = `판매자 추천 점수: ${Math.round(sellerScore * 100)}점`;
+      } else {
+        reasonValue = '추천 상품입니다.';
+      }
+    }
+    
     const reason =
       typeof reasonValue === 'string' ? reasonValue : JSON.stringify(reasonValue);
     
+    // 점수 계산 (NaN 방지)
+    const finalScore = result.final_score || result.match_score || 0;
+    const score = finalScore && !isNaN(finalScore) && finalScore > 0 ? Math.round(finalScore * 100) : undefined;
+    
     return {
       image: `https://images.unsplash.com/photo-1557817683-5cfe3620b05c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400`,
-      name: result.title,
-      price: `₩${result.price.toLocaleString()}`,
+      name: result.title || result.name || '상품명 없음',
+      price: `₩${(result.price || 0).toLocaleString()}`,
       avgPrice: rankingFactors.market_avg ? `₩${Math.round(rankingFactors.market_avg).toLocaleString()}` : undefined,
-      score: Math.round(result.final_score * 100),
+      score: score && score > 0 ? score : undefined, // NaN이거나 0이면 표시하지 않음
       reason,
       site: result.seller_name || '중고나라',
       link: '#'

@@ -38,7 +38,7 @@ export default function ProductCard({
         <div className={compact ? 'flex-1 min-w-0' : 'p-5'}>
           <div className="flex items-start justify-between gap-2 mb-2">
             <h3 className={`${compact ? 'text-sm' : ''} truncate`}>{name}</h3>
-            {score && (
+            {score && !isNaN(score) && score > 0 && (
               <Badge className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl shrink-0">
                 {score}/100
               </Badge>
@@ -56,7 +56,7 @@ export default function ProductCard({
           </div>
 
           {site && !compact && (
-            <p className="text-sm text-gray-600 mb-3">출처: {site}</p>
+            <p className="text-sm text-gray-600 mb-3">판매자: {site}</p>
           )}
 
           {reason && !compact && (
