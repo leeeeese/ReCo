@@ -211,26 +211,53 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
         agent = PriceAgent()
 
         # 1) DB 조회
-        if search_query.get("keywords"):
-            sellers_with_products = search_products_by_keywords(
-                keywords=search_query["keywords"],
-                category=user_input.get("category"),
-                price_min=user_input.get("price_min"),
-                price_max=user_input.get("price_max"),
-                limit=50
-            )
-        else:
-            sellers_with_products = get_sellers_with_products(
-                search_query=search_query.get("original_query"),
-                category=user_input.get("category"),
-                category_top=None,
-                price_min=user_input.get("price_min"),
-                price_max=user_input.get("price_max"),
-                limit=50
+        try:
+            if search_query.get("keywords"):
+                sellers_with_products = search_products_by_keywords(
+                    keywords=search_query["keywords"],
+                    category=user_input.get("category"),
+                    price_min=user_input.get("price_min"),
+                    price_max=user_input.get("price_max"),
+                    limit=50
+                )
+            else:
+                # 검색 쿼리가 없으면 모든 상품 조회 (필터만 적용)
+                search_query_str = search_query.get("original_query") or search_query.get("enhanced_query")
+                sellers_with_products = get_sellers_with_products(
+                    search_query=search_query_str,
+                    category=user_input.get("category"),
+                    category_top=None,
+                    price_min=user_input.get("price_min"),
+                    price_max=user_input.get("price_max"),
+                    limit=50
+                )
+
+            logger.info(
+                "가격 분석용 판매자 조회 완료",
+                extra={
+                    "seller_count": len(sellers_with_products) if sellers_with_products else 0,
+                    "has_keywords": bool(search_query.get("keywords")),
+                    "search_query": search_query_str if not search_query.get("keywords") else None,
+                }
             )
 
-        if not sellers_with_products:
-            raise ValueError("DB에서 상품 데이터를 찾을 수 없습니다.")
+            if not sellers_with_products:
+                # 필터를 완화하여 재시도
+                logger.warning("검색 조건으로 상품을 찾지 못해 필터를 완화하여 재시도")
+                sellers_with_products = get_sellers_with_products(
+                    search_query=None,  # 검색어 제거
+                    category=None,  # 카테고리 제거
+                    category_top=None,
+                    price_min=None,  # 가격 필터 제거
+                    price_max=None,
+                    limit=50
+                )
+                
+                if not sellers_with_products:
+                    raise ValueError("DB에 상품 데이터가 없거나 검색 조건이 너무 엄격합니다.")
+        except Exception as e:
+            logger.exception("가격 에이전트 DB 조회 실패")
+            raise ValueError(f"가격 에이전트 데이터 조회 실패: {str(e)}")
 
         # 2) 가격 분석 실행
         price_recommendations = agent.recommend_sellers_by_price(
@@ -240,19 +267,24 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
 
         # 3) 상태 저장 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
         # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        # current_step은 병렬 실행 중 충돌 방지를 위해 설정하지 않음 (orchestrator에서 설정)
         return {
             "price_agent_recommendations": {
                 "recommended_sellers": price_recommendations,
                 "market_analysis": {},
                 "reasoning": "가격 관점 분석 완료"
             },
-            "current_step": "price_analyzed",
             "completed_steps": ["price_analysis"],  # add reducer가 기존 리스트와 병합
         }
 
     except Exception as e:
         logger.exception("가격 에이전트 오류")
+        # 병렬 실행 중 error_message, current_step 충돌 방지: 각 노드의 결과에 에러 정보 포함
         return {
-            "error_message": f"가격 에이전트 오류: {str(e)}",
-            "current_step": "error",
+            "price_agent_recommendations": {
+                "recommended_sellers": [],
+                "reasoning": "",
+                "error": f"가격 에이전트 오류: {str(e)}",
+            },
+            "completed_steps": ["price_analysis"],
         }

@@ -196,6 +196,23 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
         price_results = state.get("price_agent_recommendations", {})
         safety_results = state.get("safety_agent_recommendations", {})
 
+        # 서브에이전트 에러 확인
+        price_error = price_results.get("error") if isinstance(price_results, dict) else None
+        safety_error = safety_results.get("error") if isinstance(safety_results, dict) else None
+        
+        error_messages = []
+        if price_error:
+            error_messages.append(f"가격 에이전트: {price_error}")
+        if safety_error:
+            error_messages.append(f"안전거래 에이전트: {safety_error}")
+        
+        if error_messages:
+            return {
+                "error_message": "; ".join(error_messages),
+                "current_step": "error",
+                "completed_steps": ["recommendation"],
+            }
+
         if not price_results or not safety_results:
             raise ValueError("서브에이전트 결과가 완료되지 않았습니다.")
 
@@ -236,14 +253,33 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             recommended_sellers=result["final_seller_recommendations"],
             user_input=user_input,
             persona_classification=persona_classification,
-            max_products_per_seller=5
+            min_products_per_seller=5,
+            max_products_per_seller=10
         )
+        
+        # 모든 판매자가 상품이 없는 경우 예외 처리
+        if not sellers_with_products:
+            logger.warning(
+                "추천된 모든 판매자에게 매칭된 상품이 없음",
+                extra={
+                    "recommended_seller_count": len(result["final_seller_recommendations"]),
+                    "user_input": user_input
+                }
+            )
+            return {
+                "final_seller_recommendations": [],
+                "final_item_scores": [],
+                "ranking_explanation": "추천된 판매자들에게 조건에 맞는 상품을 찾을 수 없습니다.",
+                "current_step": "recommendation_completed",
+                "completed_steps": ["recommendation"],
+            }
         
         # 상품 리스트를 평탄화하여 final_item_scores 생성
         all_products = []
         for seller in sellers_with_products:
-            for product in seller.get("products", []):
-                all_products.append(product)
+            products = seller.get("products", [])
+            if products:  # 상품이 있는 경우만 추가
+                all_products.extend(products)
         
         # 상품을 match_score 순으로 정렬
         all_products.sort(key=lambda x: x.get("match_score", 0.0), reverse=True)

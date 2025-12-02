@@ -135,7 +135,8 @@ def match_products_to_sellers(
     recommended_sellers: List[Dict[str, Any]],
     user_input: Dict[str, Any],
     persona_classification: Optional[Dict[str, Any]] = None,
-    max_products_per_seller: int = 5
+    min_products_per_seller: int = 5,
+    max_products_per_seller: int = 10
 ) -> List[Dict[str, Any]]:
     """
     추천된 판매자들에게 상품을 매칭하는 룰베이스 함수
@@ -144,12 +145,17 @@ def match_products_to_sellers(
         recommended_sellers: 추천된 판매자 리스트 (seller_id 포함)
         user_input: 사용자 입력 (search_query, price_min, price_max 등)
         persona_classification: 페르소나 분류 결과
-        max_products_per_seller: 판매자당 최대 상품 수
+        min_products_per_seller: 판매자당 희망 최소 상품 수 (기본값: 5, 실제 개수보다 적어도 반환)
+        max_products_per_seller: 판매자당 최대 상품 수 (기본값: 10)
     
     Returns:
         판매자 정보와 매칭된 상품 리스트가 포함된 딕셔너리 리스트
+        (상품이 없는 판매자는 제외됨)
     """
     from server.db.product_service import get_products_by_seller_ids
+    from server.utils.logger import get_logger
+    
+    logger = get_logger(__name__)
     
     if not recommended_sellers:
         return []
@@ -160,17 +166,22 @@ def match_products_to_sellers(
     if not seller_ids:
         return []
     
-    # DB에서 상품 조회
+    # DB에서 상품 조회 (필터링을 위해 더 많이 조회)
     sellers_with_products = get_products_by_seller_ids(
         seller_ids=seller_ids,
-        limit=max_products_per_seller
+        limit=max_products_per_seller * 2  # 필터링 후에도 충분한 상품 확보
     )
     
     # 판매자 ID로 인덱싱
     sellers_dict = {str(seller["seller_id"]): seller for seller in sellers_with_products}
     
+    # 중복 상품 추적 (여러 판매자에게 나타나는 상품 제거)
+    seen_product_ids = set()
+    
     # 추천된 판매자 순서대로 정렬하고 상품 매칭
     matched_results = []
+    sellers_without_products = []
+    
     for seller in recommended_sellers:
         seller_id = seller.get("seller_id")
         seller_id_str = str(seller_id)
@@ -182,9 +193,34 @@ def match_products_to_sellers(
         products = seller_data.get("products", [])
         filtered_products = _filter_products_by_user_input(products, user_input)
         
+        # 중복 상품 제거 (이미 다른 판매자에게 나타난 상품 제외)
+        unique_products = []
+        for product in filtered_products:
+            product_id = product.get("product_id")
+            if product_id and product_id not in seen_product_ids:
+                unique_products.append(product)
+                seen_product_ids.add(product_id)
+        
+        # 상품이 없는 경우 예외 처리
+        if not unique_products:
+            sellers_without_products.append({
+                "seller_id": seller_id,
+                "seller_name": seller.get("seller_name")
+            })
+            logger.warning(
+                "판매자에게 매칭된 상품이 없음",
+                extra={
+                    "seller_id": seller_id,
+                    "seller_name": seller.get("seller_name"),
+                    "total_products_in_db": len(products),
+                    "filtered_products": len(filtered_products)
+                }
+            )
+            continue  # 상품이 없는 판매자는 결과에서 제외
+        
         # 상품 점수 계산 및 정렬
         scored_products = []
-        for product in filtered_products[:max_products_per_seller]:
+        for product in unique_products:
             product_score = _calculate_product_match_score(
                 product, 
                 seller, 
@@ -204,10 +240,38 @@ def match_products_to_sellers(
         # 점수 순으로 정렬
         scored_products.sort(key=lambda x: x["match_score"], reverse=True)
         
+        # 실제 상품 개수에 맞춰서 선택 (1개면 1개, 3개면 3개, 10개 이상이면 최대 10개)
+        # min_products_per_seller는 "희망 최소 개수"이지 "필수 최소 개수"가 아님
+        actual_count = len(scored_products)
+        num_products = min(actual_count, max_products_per_seller)
+        selected_products = scored_products[:num_products]
+        
+        # 상품 개수가 희망 최소 개수보다 적은 경우 로깅
+        if actual_count < min_products_per_seller:
+            logger.info(
+                "판매자 상품 개수가 희망 최소 개수보다 적음",
+                extra={
+                    "seller_id": seller_id,
+                    "seller_name": seller.get("seller_name"),
+                    "actual_count": actual_count,
+                    "min_products_per_seller": min_products_per_seller
+                }
+            )
+        
         matched_results.append({
             **seller,
-            "products": scored_products,
+            "products": selected_products,
         })
+    
+    # 상품이 없는 판매자 요약 로깅
+    if sellers_without_products:
+        logger.warning(
+            "상품이 없는 판매자 제외",
+            extra={
+                "excluded_count": len(sellers_without_products),
+                "excluded_sellers": sellers_without_products[:10]  # 최대 10개만 로깅
+            }
+        )
     
     return matched_results
 
