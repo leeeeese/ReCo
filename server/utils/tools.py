@@ -306,12 +306,20 @@ def _filter_products_by_user_input(
             continue
         
         # 검색어 필터 (제목/설명에 포함)
+        # 키워드가 여러 개일 경우 모든 키워드가 포함되어야 함 (AND 조건)
         if search_query:
-            query_lower = search_query.lower()
-            title = product.get("title", "").lower()
-            description = product.get("description", "").lower()
-            if query_lower not in title and query_lower not in description:
-                continue
+            # 검색어를 키워드로 분리
+            keywords = [kw.strip().lower() for kw in search_query.split() if kw.strip()]
+            if keywords:
+                title = product.get("title", "").lower()
+                description = product.get("description", "").lower()
+                # 모든 키워드가 제목 또는 설명에 포함되어야 함
+                all_keywords_match = all(
+                    keyword in title or keyword in description
+                    for keyword in keywords
+                )
+                if not all_keywords_match:
+                    continue
         
         filtered.append(product)
     
