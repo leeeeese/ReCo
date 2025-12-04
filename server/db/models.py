@@ -77,3 +77,47 @@ class Review(Base):
     seller_id = Column(Integer, index=True)  # 판매자 ID
     seller_name = Column(String)  # 판매자 이름 (참조용)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Conversation(Base):
+    """대화 세션"""
+
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    session_id = Column(String, unique=True, index=True)  # 세션 ID (UUID)
+    user_id = Column(String, index=True)  # 사용자 ID (선택사항, 익명 사용자 지원)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class Message(Base):
+    """대화 메시지"""
+
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    conversation_id = Column(Integer, index=True)  # 대화 세션 ID
+    session_id = Column(String, index=True)  # 세션 ID (조회용)
+    role = Column(String)  # "user" or "assistant"
+    content = Column(Text)  # 메시지 내용
+    # 추가 메타데이터 (user_input, recommendation_result 등) - metadata는 SQLAlchemy 예약어
+    message_metadata = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class RecommendationLog(Base):
+    """에이전트 추천 결과 로그 (평가용)"""
+
+    __tablename__ = "recommendation_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    buyer_id = Column(String, index=True)  # 구매자 ID (reviewer_id)
+    user_input = Column(JSON)  # 사용자 입력 (검색 쿼리, 선호도 등)
+    recommended_seller_ids = Column(JSON)  # 추천된 판매자 ID 리스트 (상위 10개)
+    recommended_sellers = Column(JSON)  # 추천된 판매자 상세 정보
+    ground_truth_seller_id = Column(
+        Integer, index=True)  # 정답 판매자 ID (answer_data에서)
+    is_correct = Column(Integer, default=0)  # 정답 여부 (0: 오답, 1: 정답)
+    rank = Column(Integer)  # 정답 판매자가 추천 리스트에서 몇 번째인지 (없으면 None)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

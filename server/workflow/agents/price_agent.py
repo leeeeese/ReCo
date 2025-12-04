@@ -19,6 +19,9 @@ from server.workflow.agents.tool import (
     seller_profile_tool,
     review_feature_tool,
 )
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class PriceAgent:
@@ -49,7 +52,8 @@ class PriceAgent:
                         "sample_count": len(prices)
                     }
             except Exception as e:
-                print(f"시세 조회 실패: {e}")
+                logger.warning("시세 조회 실패", exc_info=e,
+                               extra={"product": product})
                 continue
 
         return market_data
@@ -142,8 +146,23 @@ class PriceAgent:
             format="json"
         )
 
+        # LLM 결과를 dict 형태로 변환 (seller_id를 key로 사용)
+        recommended_sellers_raw = decision.get("recommended_sellers", {})
+        if isinstance(recommended_sellers_raw, list):
+            # list 형태인 경우 dict로 변환
+            recommended_sellers_dict = {}
+            for item in recommended_sellers_raw:
+                seller_id = item.get("seller_id")
+                if seller_id:
+                    recommended_sellers_dict[str(seller_id)] = item
+            recommended_sellers_by_price = recommended_sellers_dict
+        else:
+            # 이미 dict 형태인 경우 그대로 사용
+            recommended_sellers_by_price = recommended_sellers_raw if isinstance(
+                recommended_sellers_raw, dict) else {}
+
         return {
-            "recommended_sellers_by_price": decision.get("recommended_sellers", []),
+            "recommended_sellers_by_price": recommended_sellers_by_price,
             "price_reasoning": decision.get("reasoning", ""),
             "market_analysis": market_prices,
             "recommendation_score": decision.get("confidence", 0.5)
@@ -194,26 +213,73 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
         agent = PriceAgent()
 
         # 1) DB 조회
-        if search_query.get("keywords"):
-            sellers_with_products = search_products_by_keywords(
-                keywords=search_query["keywords"],
-                category=user_input.get("category"),
-                price_min=user_input.get("price_min"),
-                price_max=user_input.get("price_max"),
-                limit=50
-            )
-        else:
-            sellers_with_products = get_sellers_with_products(
-                search_query=search_query.get("original_query"),
-                category=user_input.get("category"),
-                category_top=None,
-                price_min=user_input.get("price_min"),
-                price_max=user_input.get("price_max"),
-                limit=50
+        try:
+            if search_query.get("keywords"):
+                sellers_with_products = search_products_by_keywords(
+                    keywords=search_query["keywords"],
+                    category=user_input.get("category"),
+                    price_min=user_input.get("price_min"),
+                    price_max=user_input.get("price_max"),
+                    limit=50
+                )
+            else:
+                # 검색 쿼리가 없으면 모든 상품 조회 (필터만 적용)
+                search_query_str = search_query.get(
+                    "original_query") or search_query.get("enhanced_query")
+                sellers_with_products = get_sellers_with_products(
+                    search_query=search_query_str,
+                    category=user_input.get("category"),
+                    category_top=None,
+                    price_min=user_input.get("price_min"),
+                    price_max=user_input.get("price_max"),
+                    limit=50
+                )
+
+            logger.info(
+                "가격 분석용 판매자 조회 완료",
+                extra={
+                    "seller_count": len(sellers_with_products) if sellers_with_products else 0,
+                    "has_keywords": bool(search_query.get("keywords")),
+                    "search_query": search_query_str if not search_query.get("keywords") else None,
+                }
             )
 
-        if not sellers_with_products:
-            raise ValueError("DB에서 상품 데이터를 찾을 수 없습니다.")
+            if not sellers_with_products:
+                # 필터를 완화하여 재시도
+                logger.warning(
+                    "검색 조건으로 상품을 찾지 못해 필터를 완화하여 재시도",
+                    extra={
+                        "original_keywords": search_query.get("keywords"),
+                        "original_search_query": search_query.get("original_query"),
+                    }
+                )
+                sellers_with_products = get_sellers_with_products(
+                    search_query=None,  # 검색어 제거
+                    category=None,  # 카테고리 제거
+                    category_top=None,
+                    price_min=None,  # 가격 필터 제거
+                    price_max=None,
+                    limit=50
+                )
+
+                if not sellers_with_products:
+                    # DB에 상품이 있는지 확인
+                    from server.db.database import SessionLocal
+                    from server.db.models import Product
+                    db = SessionLocal()
+                    try:
+                        total_count = db.query(Product).count()
+                        if total_count == 0:
+                            raise ValueError(
+                                "DB에 상품 데이터가 없습니다. CSV 파일을 먼저 마이그레이션해주세요.")
+                        else:
+                            raise ValueError(
+                                f"검색 조건이 너무 엄격합니다. (DB에 총 {total_count}개 상품 존재)")
+                    finally:
+                        db.close()
+        except Exception as e:
+            logger.exception("가격 에이전트 DB 조회 실패")
+            raise ValueError(f"가격 에이전트 데이터 조회 실패: {str(e)}")
 
         # 2) 가격 분석 실행
         price_recommendations = agent.recommend_sellers_by_price(
@@ -221,17 +287,26 @@ def price_agent_node(state: RecommendationState) -> RecommendationState:
             sellers_with_products
         )
 
-        # 3) 상태 저장
-        state["price_agent_recommendations"] = {
-            "recommended_sellers": price_recommendations,
-            "market_analysis": {},
-            "reasoning": "가격 관점 분석 완료"
+        # 3) 상태 저장 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
+        # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        # current_step은 병렬 실행 중 충돌 방지를 위해 설정하지 않음 (orchestrator에서 설정)
+        return {
+            "price_agent_recommendations": {
+                "recommended_sellers": price_recommendations,
+                "market_analysis": {},
+                "reasoning": "가격 관점 분석 완료"
+            },
+            "completed_steps": ["price_analysis"],  # add reducer가 기존 리스트와 병합
         }
-        state["current_step"] = "price_analyzed"
-        state["completed_steps"].append("price_analysis")
 
     except Exception as e:
-        state["error_message"] = f"가격 에이전트 오류: {str(e)}"
-        state["current_step"] = "error"
-
-    return state
+        logger.exception("가격 에이전트 오류")
+        # 병렬 실행 중 error_message, current_step 충돌 방지: 각 노드의 결과에 에러 정보 포함
+        return {
+            "price_agent_recommendations": {
+                "recommended_sellers": [],
+                "reasoning": "",
+                "error": f"가격 에이전트 오류: {str(e)}",
+            },
+            "completed_steps": ["price_analysis"],
+        }

@@ -5,7 +5,9 @@ LLM 기반 자율 의사결정 에이전트 유틸리티
 
 import os
 from typing import Dict, Any, Optional, List
+import time
 from openai import OpenAI
+from server.utils import config
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -19,6 +21,8 @@ class LLMAgent:
             api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
         self.model = OPENAI_MODEL
         self.system_prompt = system_prompt
+        self.max_retries = config.LLM_MAX_RETRIES
+        self.request_timeout = config.LLM_TIMEOUT_SECONDS
 
     def decide(self,
                context: Dict[str, Any],
@@ -44,23 +48,33 @@ class LLMAgent:
         user_prompt = self._build_prompt(context, decision_task, options)
         messages.append({"role": "user", "content": user_prompt})
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                response_format={
-                    "type": "json_object"} if format == "json" else None,
-                temperature=0.7  # 창의적 판단을 위한 적절한 온도
-            )
+        last_error: Optional[Exception] = None
 
-            result = response.choices[0].message.content
-            if format == "json":
-                import json
-                return json.loads(result)
-            return {"result": result}
+        for attempt in range(self.max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    response_format={
+                        "type": "json_object"} if format == "json" else None,
+                    temperature=0.7,  # 창의적 판단을 위한 적절한 온도
+                    timeout=self.request_timeout,
+                )
 
-        except Exception as e:
-            return {"error": str(e), "fallback": True}
+                result = response.choices[0].message.content
+                if format == "json":
+                    import json
+                    return json.loads(result)
+                return {"result": result}
+
+            except Exception as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    sleep_for = 2 ** attempt
+                    time.sleep(sleep_for)
+                    continue
+
+        return {"error": str(last_error) if last_error else "LLM 호출 실패", "fallback": True}
 
     def _build_prompt(self, context: Dict[str, Any], task: str, options: Optional[List[Any]]) -> str:
         """프롬프트 구성"""

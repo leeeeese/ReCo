@@ -8,6 +8,9 @@ from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
 from server.workflow.prompts import load_prompt
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class OrchestratorAgent:
@@ -19,9 +22,6 @@ class OrchestratorAgent:
         self.combine_sellers_prompt = load_prompt(
             "orchestrator_recommendation_prompt"
         )
-        self.rank_products_prompt = load_prompt(
-            "orchestrator_ranking_prompt"
-        )
 
     def combine_and_rank(
         self,
@@ -31,7 +31,8 @@ class OrchestratorAgent:
         persona_classification: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        2개 서브에이전트 결과를 종합하여 최종 추천 및 랭킹
+        2개 서브에이전트 결과를 종합하여 최종 판매자 추천 (상위 10명)
+        상품 매칭은 별도 룰베이스로 처리
         """
 
         # user_input / persona 맥락을 서브에이전트 결과에 태워서 전달 (LLM이 trade-off 판단하기 좋게)
@@ -46,19 +47,13 @@ class OrchestratorAgent:
             "persona_classification": persona_classification,
         }
 
-        # 1. 2개 서브에이전트 결과 종합하여 판매자 추천
+        # 2개 서브에이전트 결과 종합하여 판매자 추천 (상위 10명)
         final_sellers = self._combine_sub_agent_results(
             price_results_with_ctx, safety_results_with_ctx
         )
 
-        # 2. 추천된 판매자의 상품들을 랭킹
-        ranked_products = self._rank_products(
-            final_sellers, user_input, persona_classification
-        )
-
         return {
             "final_seller_recommendations": final_sellers,
-            "ranked_products": ranked_products,
         }
 
     def _combine_sub_agent_results(
@@ -91,7 +86,6 @@ class OrchestratorAgent:
             score_key="price_score",
             reasoning_key="price_reasoning",
             source_score_key="price_score",
-            include_products=False,
         )
 
         self._merge_seller_results(
@@ -100,7 +94,6 @@ class OrchestratorAgent:
             score_key="safety_score",
             reasoning_key="safety_reasoning",
             source_score_key="safety_score",
-            include_products=True,  # safety 쪽에 products가 붙어 있는 구조라면 여기서 채움
         )
 
         # 3) LLM 결합 결과 파싱
@@ -131,14 +124,13 @@ class OrchestratorAgent:
                         "final_score": final_score_data.get("score", 0.0),
                         "final_reasoning": final_score_data.get("reasoning", ""),
                         "combination_explanation": decision.get("reasoning", ""),
-                        "products": seller.get("products", []),
                     }
                 )
 
             final_recommendations.sort(
                 key=lambda x: x["final_score"], reverse=True)
-            if final_recommendations:
-                return final_recommendations
+            # 상위 10명만 반환
+            return final_recommendations[:10]
 
         # 4) 🔥 Fallback: LLM 결합 결과가 비었거나 이상한 경우
         #    → 가격/안전 점수를 단순 결합해서 final_score 산출
@@ -160,13 +152,13 @@ class OrchestratorAgent:
                     "final_score": final_score,
                     "final_reasoning": "LLM 결합 결과가 없거나 비정상이라 가격/안전 점수를 단순 결합하여 산출된 최종 점수입니다.",
                     "combination_explanation": "",
-                    "products": seller.get("products", []),
                 }
             )
 
         fallback_recommendations.sort(
             key=lambda x: x["final_score"], reverse=True)
-        return fallback_recommendations
+        # 상위 10명만 반환
+        return fallback_recommendations[:10]
 
     def _merge_seller_results(
         self,
@@ -175,9 +167,8 @@ class OrchestratorAgent:
         score_key: str,
         reasoning_key: str,
         source_score_key: str,
-        include_products: bool = False,
     ) -> None:
-        """서브에이전트 결과를 all_sellers에 병합하는 공통 로직"""
+        """서브에이전트 결과를 all_sellers에 병합하는 공통 로직 (상품 정보는 제외)"""
 
         for seller in sellers:
             seller_id = seller.get("seller_id")
@@ -197,103 +188,31 @@ class OrchestratorAgent:
             all_sellers[seller_id_str][reasoning_key] = seller.get(
                 reasoning_key, "")
 
-            if include_products:
-                # safety 쪽에서 더 풍부한 products를 내려주는 경우, 여기서 붙이기
-                all_sellers[seller_id_str]["products"] = seller.get(
-                    "products", [])
-
-    def _rank_products(
-        self,
-        final_sellers: List[Dict[str, Any]],
-        user_input: Dict[str, Any],
-        persona_classification: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
-        """상품 랭킹"""
-
-        if not final_sellers:
-            return []
-
-        # 각 판매자의 상품 정보 수집
-        all_products: List[Dict[str, Any]] = []
-        for seller in final_sellers:
-            seller_id = seller.get("seller_id")
-            seller_name = seller.get("seller_name")
-            products = seller.get("products", []) or []
-
-            for product in products:
-                all_products.append(
-                    {
-                        **product,
-                        "seller_id": seller_id,
-                        "seller_name": seller_name,
-                        "seller_price_score": seller.get("price_score", 0.0),
-                        "seller_safety_score": seller.get("safety_score", 0.0),
-                        "seller_final_score": seller.get("final_score", 0.0),
-                    }
-                )
-
-        if not all_products:
-            return []
-
-        # 판매자 점수 정보를 리스트로 구성
-        seller_scores_list = [
-            {
-                "seller_id": seller.get("seller_id"),
-                "seller_name": seller.get("seller_name"),
-                "price": seller.get("price_score", 0.0),
-                "safety": seller.get("safety_score", 0.0),
-                "final": seller.get("final_score", 0.0),
-            }
-            for seller in final_sellers[:10]
-        ]
-
-        context = {
-            "user_input": user_input,
-            "persona_type": str(persona_classification.get("persona_type", "")),
-            "products": all_products[:50],
-            "final_seller_scores": seller_scores_list,
-        }
-
-        decision = self.llm_agent.decide(
-            context=context,
-            decision_task=self.rank_products_prompt,
-            format="json",
-        )
-
-        ranked_product_ids = decision.get("ranked_product_ids", [])
-
-        # 🔥 fallback: LLM이 상품 순서를 안 줬으면 seller_final_score 기준 정렬
-        if not ranked_product_ids and decision.get("fallback"):
-            all_products.sort(
-                key=lambda x: x["seller_final_score"], reverse=True)
-            return all_products
-
-        # 상품을 product_id로 인덱싱
-        products_by_id = {p.get("product_id"): p for p in all_products}
-
-        ranked_products: List[Dict[str, Any]] = []
-        ranked_ids = set()
-
-        for product_id in ranked_product_ids:
-            product = products_by_id.get(product_id)
-            if product:
-                ranked_products.append(product)
-                ranked_ids.add(product_id)
-
-        # 랭킹되지 않은 상품들 추가 (순서는 기존 seller_final_score 순)
-        for product in all_products:
-            pid = product.get("product_id")
-            if pid not in ranked_ids:
-                ranked_products.append(product)
-
-        return ranked_products
-
 
 def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
     """추천 오케스트레이터 노드"""
     try:
         price_results = state.get("price_agent_recommendations", {})
         safety_results = state.get("safety_agent_recommendations", {})
+
+        # 서브에이전트 에러 확인
+        price_error = price_results.get("error") if isinstance(
+            price_results, dict) else None
+        safety_error = safety_results.get("error") if isinstance(
+            safety_results, dict) else None
+
+        error_messages = []
+        if price_error:
+            error_messages.append(f"가격 에이전트: {price_error}")
+        if safety_error:
+            error_messages.append(f"안전거래 에이전트: {safety_error}")
+
+        if error_messages:
+            return {
+                "error_message": "; ".join(error_messages),
+                "current_step": "error",
+                "completed_steps": ["recommendation"],
+            }
 
         if not price_results or not safety_results:
             raise ValueError("서브에이전트 결과가 완료되지 않았습니다.")
@@ -309,25 +228,77 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             persona_classification,
         )
 
-        state["final_seller_recommendations"] = result["final_seller_recommendations"]
-        state["final_item_scores"] = result["ranked_products"]
-        state["ranking_explanation"] = "LLM 기반 자율 판단으로 최종 추천 및 랭킹 완료"
-        state["current_step"] = "recommendation_completed"
-        state.setdefault("completed_steps", []).append("recommendation")
-
-        print(
-            f"최종 추천 완료: {len(result['final_seller_recommendations'])}개 판매자, {len(result['ranked_products'])}개 상품"
+        logger.info(
+            "최종 판매자 추천 완료",
+            extra={
+                "seller_count": len(result["final_seller_recommendations"]),
+            },
         )
 
         for i, seller in enumerate(
             result["final_seller_recommendations"][:5], 1
         ):
-            print(
-                f"  {i}. {seller['seller_name']} (최종점수: {seller['final_score']:.3f})")
+            logger.info(
+                "추천 판매자 미리보기",
+                extra={
+                    "rank": i,
+                    "seller_name": seller["seller_name"],
+                    "final_score": seller.get("final_score"),
+                },
+            )
+
+        # 상품 매칭은 룰베이스로 처리
+        from server.utils.tools import match_products_to_sellers
+
+        sellers_with_products = match_products_to_sellers(
+            recommended_sellers=result["final_seller_recommendations"],
+            user_input=user_input,
+            persona_classification=persona_classification,
+            min_products_per_seller=5,
+            max_products_per_seller=10
+        )
+
+        # 모든 판매자가 상품이 없는 경우 예외 처리
+        if not sellers_with_products:
+            logger.warning(
+                "추천된 모든 판매자에게 매칭된 상품이 없음",
+                extra={
+                    "recommended_seller_count": len(result["final_seller_recommendations"]),
+                    "user_input": user_input
+                }
+            )
+            return {
+                "final_seller_recommendations": [],
+                "final_item_scores": [],
+                "ranking_explanation": "추천된 판매자들에게 조건에 맞는 상품을 찾을 수 없습니다.",
+                "current_step": "recommendation_completed",
+                "completed_steps": ["recommendation"],
+            }
+
+        # 상품 리스트를 평탄화하여 final_item_scores 생성
+        all_products = []
+        for seller in sellers_with_products:
+            products = seller.get("products", [])
+            if products:  # 상품이 있는 경우만 추가
+                all_products.extend(products)
+
+        # 상품을 match_score 순으로 정렬
+        all_products.sort(key=lambda x: x.get(
+            "match_score", 0.0), reverse=True)
+
+        # 새로운 state 반환 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
+        # completed_steps는 add reducer를 사용하므로 리스트로 반환
+        return {
+            "final_seller_recommendations": sellers_with_products,  # 상품 정보 포함
+            "final_item_scores": all_products,  # 룰베이스로 매칭된 상품 리스트
+            "ranking_explanation": "LLM 기반 판매자 추천 완료, 상품 매칭은 룰베이스로 처리",
+            "current_step": "recommendation_completed",
+            "completed_steps": ["recommendation"],  # add reducer가 기존 리스트와 병합
+        }
 
     except Exception as e:
-        state["error_message"] = f"추천 오케스트레이터 오류: {str(e)}"
-        state["current_step"] = "error"
-        print(f"추천 오케스트레이터 오류: {e}")
-
-    return state
+        logger.exception("추천 오케스트레이터 오류")
+        return {
+            "error_message": f"추천 오케스트레이터 오류: {str(e)}",
+            "current_step": "error",
+        }
