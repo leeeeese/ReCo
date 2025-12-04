@@ -10,7 +10,6 @@ class RecommendationState(TypedDict):
     # 입력 데이터
     user_input: Dict[str, Any]
     search_query: Optional[Dict[str, Any]]
-    persona_classification: Optional[Dict[str, Any]]
 
     # 서브에이전트 결과
     price_agent_recommendations: Optional[Dict[str, Any]]
