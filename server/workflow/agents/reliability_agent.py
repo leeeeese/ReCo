@@ -87,7 +87,6 @@ class ReliabilityAgent:
         context = {
             "user_trust_safety_preference": user_input.get("trust_safety", 50),
             "user_remote_transaction_preference": user_input.get("remote_transaction", 50),
-            "user_persona": user_input.get("persona_type"),
 
             # tools 기반 구조화 피처
             "sellers_reliability_view": seller_reliability_data,

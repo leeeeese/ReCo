@@ -64,7 +64,6 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
             "search_query": {},
-            "persona_classification": None,
             "product_agent_recommendations": None,
             "reliability_agent_recommendations": None,
             "final_seller_recommendations": None,
@@ -118,7 +117,6 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
 
         # 성공 응답 구성
         response.update({
-            "persona_classification": final_state.get("persona_classification"),
             "final_item_scores": final_state.get("final_item_scores", []),
             # 호환성을 위해
             "ranked_products": final_state.get("final_item_scores", []),
@@ -138,7 +136,6 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
                 content=f"추천 완료: {len(final_state.get('final_item_scores', []))}개 상품",
                 metadata={
                     "recommendation_result": {
-                        "persona_classification": final_state.get("persona_classification"),
                         "final_item_scores": final_state.get("final_item_scores", []),
                         "ranking_explanation": final_state.get("ranking_explanation", ""),
                     }
@@ -183,7 +180,6 @@ async def stream_workflow_progress(
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
             "search_query": {},
-            "persona_classification": None,
             "product_agent_recommendations": None,
             "reliability_agent_recommendations": None,
             "final_seller_recommendations": None,
@@ -284,7 +280,6 @@ async def stream_workflow_progress(
 
                         final_data = {
                             "type": "complete",
-                            "persona_classification": node_state.get("persona_classification"),
                             "final_item_scores": node_state.get("final_item_scores", []),
                             "final_seller_recommendations": node_state.get("final_seller_recommendations", []),
                             "ranking_explanation": node_state.get("ranking_explanation", ""),
@@ -300,7 +295,6 @@ async def stream_workflow_progress(
                             content=f"추천 완료: {len(node_state.get('final_item_scores', []))}개 상품",
                             metadata={
                                 "recommendation_result": {
-                                    "persona_classification": node_state.get("persona_classification"),
                                     "final_item_scores": node_state.get("final_item_scores", []),
                                     "ranking_explanation": node_state.get("ranking_explanation", ""),
                                 }
