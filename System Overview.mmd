@@ -14,8 +14,8 @@ flowchart TB
         orchestrator["Orchestrator Agent / Result Aggregation & Ranking"]
   end
  subgraph ReasoningLayer["Reasoning Layer / LangGraph Agentic Pipeline"]
-        price["Price Agent / 시세·적정가 분석"]
-        safety["Safety Agent / 사기·위험도 분석"]
+        product["Product Agent / 상품 특성 분석"]
+        reliability["Reliability Agent / 신뢰도 분석"]
   end
  subgraph External["External Systems"]
         db["Database / Product & History"]
@@ -24,11 +24,11 @@ flowchart TB
     user --> reactUI
     reactUI -- JSON Request --> fastapi
     fastapi --> initNode & reactUI
-    initNode --> price & safety
-    price -- 상품·거래 정보 조회 --> db
-    safety -- 판매자·리스크 정보 조회 --> db
-    price -- LLM 기반 가격 추론 --> llm
-    safety -- LLM 기반 위험도 추론 --> llm
-    price --> orchestrator
-    safety --> orchestrator
+    initNode --> product & reliability
+    product -- 상품·거래 정보 조회 --> db
+    reliability -- 판매자·리스크 정보 조회 --> db
+    product -- LLM 기반 상품 특성 추론 --> llm
+    reliability -- LLM 기반 신뢰도 추론 --> llm
+    product --> orchestrator
+    reliability --> orchestrator
     orchestrator -- 최종 추천 응답 --> fastapi

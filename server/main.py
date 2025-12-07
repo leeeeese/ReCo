@@ -24,7 +24,8 @@ app = FastAPI(
 # CORS 설정 (프론트엔드 연동)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Vite 기본 포트
+    allow_origins=["http://localhost:3000",
+                   "http://localhost:5173"],  # Vite 기본 포트
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,8 +36,10 @@ app.add_middleware(
     RateLimitMiddleware,
     requests_per_hour=int(os.getenv("RATE_LIMIT_PER_HOUR", "100")),
     window_seconds=int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600")),
-    enable_user_limit=os.getenv("RATE_LIMIT_ENABLE_USER", "true").lower() == "true",
-    enable_ip_limit=os.getenv("RATE_LIMIT_ENABLE_IP", "true").lower() == "true",
+    enable_user_limit=os.getenv(
+        "RATE_LIMIT_ENABLE_USER", "true").lower() == "true",
+    enable_ip_limit=os.getenv("RATE_LIMIT_ENABLE_IP",
+                              "true").lower() == "true",
 )
 
 # 라우터 등록
@@ -50,17 +53,18 @@ async def warmup_workflow():
     """워크플로우 및 LLM 클라이언트 warmup"""
     try:
         logger.info("워크플로우 warmup 시작...")
-        
+
         # 워크플로우 앱 초기화 (싱글톤)
         from server.routers.workflow import get_workflow_app
         workflow_app = get_workflow_app()
         logger.info("워크플로우 앱 초기화 완료")
-        
+
         # LLM 클라이언트 warmup (각 Agent의 LLM 클라이언트 초기화)
         from server.utils.llm_agent import create_agent
-        
+
         # 각 에이전트 타입별로 LLM 클라이언트 생성 (초기화만, 실제 호출은 안 함)
-        agent_types = ["price_agent", "safety_agent", "final_matcher", "persona_classifier"]
+        agent_types = ["product_agent", "reliability_agent",
+                       "final_matcher", "persona_classifier"]
         for agent_type in agent_types:
             try:
                 agent = create_agent(agent_type)
@@ -71,7 +75,7 @@ async def warmup_workflow():
                     logger.info(f"{agent_type} LLM 클라이언트 초기화 완료")
             except Exception as e:
                 logger.warning(f"{agent_type} 초기화 중 오류: {e}")
-        
+
         logger.info("워크플로우 warmup 완료")
     except Exception as e:
         logger.error(f"워크플로우 warmup 실패: {e}", exc_info=True)
@@ -81,17 +85,17 @@ async def warmup_workflow():
 async def startup():
     # 환경 변수 검증은 이미 config.py에서 수행됨
     logger.info("환경 변수 검증 완료")
-    
+
     database.create_tables()
     logger.info("데이터베이스 초기화 완료")
-    
+
     # 캐시 시스템 초기화 확인
     from server.utils.cache import cache_manager
     if cache_manager.use_redis:
         logger.info("Redis 캐시 시스템 활성화")
     else:
         logger.info("In-memory 캐시 시스템 사용")
-    
+
     # Cold start 대비: 워크플로우 warmup
     await warmup_workflow()
 

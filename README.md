@@ -43,8 +43,8 @@ ReCo/
 │   │   ├── graph.py        # Graph 정의
 │   │   ├── prompts/        # LLM 프롬프트 파일
 │   │   └── agents/         # Agent 구현
-│   │       ├── price_agent.py         # 가격 합리성 판단
-│   │       ├── safety_agent.py        # 안전거래 판단
+│   │       ├── product_agent.py        # 상품 특성 분석 (품질 패턴, 가격 전략, 판매자 성향)
+│   │       ├── reliability_agent.py   # 신뢰도 분석 (거래 행동, 리뷰 성향, 신뢰도, 활동성)
 │   │       ├── orchestrator_agent.py  # 최종 통합/랭킹
 │   │       └── price_updater.py       # 시세 크롤러
 │   └── utils/
@@ -165,22 +165,32 @@ streamlit run main.py
    - 페르소나 분류를 수행합니다 (price_sensible, balanced, risk_averse 등).
    - 검색 쿼리를 생성합니다 (키워드별 AND 조건 매칭).
 
-2. **Price Agent (가격 분석)**
+2. **Product Agent (상품 특성 분석)**
 
    - DB에서 상품 목록을 조회합니다 (키워드별 정확한 매칭).
-   - 시세 데이터와 가격 리스크를 분석합니다.
-   - `server/workflow/prompts/price_prompt.txt` 프롬프트로 LLM 판단을 수행합니다.
-   - 가격 관점에서 상위 판매자를 추천합니다 (상위 10명).
+   - 3가지 핵심 분석 수행:
+     - 판매자의 상품 품질 패턴 분석 (새상품/중고/사용감 등)
+     - 시세 대비 가격 전략 분석 (싸게 파는가/비싸게 파는가)
+     - 판매자 성향 도출 (예: "좋은 물건을 싸게 파는 판매자")
+   - `server/workflow/prompts/product_prompt.txt` 프롬프트로 LLM 판단을 수행합니다.
+   - 상품 특성 관점에서 상위 판매자를 추천합니다 (상위 10명).
 
-3. **Safety Agent (안전거래 분석)**
+3. **Reliability Agent (신뢰도 분석)**
 
    - 판매자 프로필, 리뷰, 거래 리스크를 DB 기반으로 분석합니다.
-   - `server/workflow/prompts/safety_prompt.txt` 프롬프트로 LLM 판단을 수행합니다.
-   - 안전거래 관점에서 신뢰할 수 있는 판매자를 추천합니다.
+   - 4가지 핵심 분석 수행:
+     - 거래 행동 패턴 분석 (직거래/택배, 응답 속도 등)
+     - 리뷰 기반 성향 추론 (친절함, 응답 빠름 등)
+     - 신뢰도 프로파일링 (신뢰도 점수, 거래 이력 등)
+     - 활동성·신뢰도 점수화 (활발한 판매자, 우수 판매자 등)
+   - `server/workflow/prompts/reliability_prompt.txt` 프롬프트로 LLM 판단을 수행합니다.
+   - 신뢰도 관점에서 신뢰할 수 있는 판매자를 추천합니다.
 
 4. **Orchestrator Agent (최종 통합)**
-   - 가격/안전 결과를 `server/workflow/prompts/orchestrator_recommendation_prompt.txt`로 통합합니다.
-   - 사용자 페르소나에 맞게 가중치를 조정하여 최종 판매자 랭킹을 생성합니다.
+   - 상품 특성/신뢰도 결과를 `server/workflow/prompts/orchestrator_recommendation_prompt.txt`로 통합합니다.
+   - Multi-agent outputs 통합, Value & reliability scores 융합
+   - Weighted ranking & final recommendation (페르소나 기반 가중치 적용)
+   - **구매자-판매자 매칭 최적화**: 판매자 성향을 기반으로 "어떤 구매자에게 이 판매자가 적합한가?" 판단
    - 룰베이스 기반으로 추천된 판매자에게 상품을 매칭합니다 (`match_products_to_sellers`).
    - LLM 출력이 없을 경우 단순 결합 fallback 로직을 수행합니다.
 
@@ -246,7 +256,7 @@ npm run test:coverage   # 커버리지 포함
 
 ## ✅ 구현 완료 기능
 
-- ✅ 멀티 에이전트 워크플로우 (Price, Safety, Orchestrator)
+- ✅ 멀티 에이전트 워크플로우 (Product, Reliability, Orchestrator)
 - ✅ 페르소나 기반 추천 시스템
 - ✅ 정확한 키워드 검색 (AND 조건 매칭)
 - ✅ React 프론트엔드 (Landing, Chat, Recommendation 페이지)

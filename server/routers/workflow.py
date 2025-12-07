@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 # 워크플로우 인스턴스 생성 (싱글톤)
 _workflow_app = None
 
+
 def get_workflow_app():
     """워크플로우 앱 싱글톤"""
     global _workflow_app
@@ -43,7 +44,7 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         session_id = user_input.session_id
         conversation = get_or_create_conversation(session_id=session_id)
         session_id = conversation.session_id
-        
+
         # 사용자 메시지 저장
         add_message(
             session_id=session_id,
@@ -51,21 +52,21 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             content=user_input.search_query,
             metadata={"user_input": user_input.dict()}
         )
-        
+
         # 이전 대화 컨텍스트 조회
         conversation_context = get_conversation_context(session_id, limit=10)
-        
+
         # user_input에 대화 컨텍스트 추가
         user_input_dict = user_input.dict()
         user_input_dict["conversation_context"] = conversation_context
-        
+
         # 초기 상태 생성
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
             "search_query": {},
             "persona_classification": None,
-            "price_agent_recommendations": None,
-            "safety_agent_recommendations": None,
+            "product_agent_recommendations": None,
+            "reliability_agent_recommendations": None,
             "final_seller_recommendations": None,
             "final_item_scores": None,
             "ranking_explanation": "",
@@ -98,7 +99,8 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
 
         # 실행 시간 계산
         if final_state.get("execution_start_time"):
-            final_state["execution_time"] = time.time() - final_state["execution_start_time"]
+            final_state["execution_time"] = time.time(
+            ) - final_state["execution_start_time"]
 
         # 응답 생성
         response: Dict[str, Any] = {
@@ -118,7 +120,8 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         response.update({
             "persona_classification": final_state.get("persona_classification"),
             "final_item_scores": final_state.get("final_item_scores", []),
-            "ranked_products": final_state.get("final_item_scores", []),  # 호환성을 위해
+            # 호환성을 위해
+            "ranked_products": final_state.get("final_item_scores", []),
             "final_seller_recommendations": final_state.get("final_seller_recommendations", []),
             "ranking_explanation": final_state.get("ranking_explanation", ""),
             "current_step": final_state.get("current_step", "completed"),
@@ -126,7 +129,7 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             "execution_time": final_state.get("execution_time"),
             "session_id": session_id,  # 세션 ID 반환
         })
-        
+
         # Assistant 메시지 저장
         if not final_state.get("error_message"):
             add_message(
@@ -160,7 +163,7 @@ async def stream_workflow_progress(
         session_id = user_input.session_id
         conversation = get_or_create_conversation(session_id=session_id)
         session_id = conversation.session_id
-        
+
         # 사용자 메시지 저장
         add_message(
             session_id=session_id,
@@ -168,21 +171,21 @@ async def stream_workflow_progress(
             content=user_input.search_query,
             metadata={"user_input": user_input.dict()}
         )
-        
+
         # 이전 대화 컨텍스트 조회
         conversation_context = get_conversation_context(session_id, limit=10)
-        
+
         # user_input에 대화 컨텍스트 추가
         user_input_dict = user_input.dict()
         user_input_dict["conversation_context"] = conversation_context
-        
+
         # 초기 상태 생성
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
             "search_query": {},
             "persona_classification": None,
-            "price_agent_recommendations": None,
-            "safety_agent_recommendations": None,
+            "product_agent_recommendations": None,
+            "reliability_agent_recommendations": None,
             "final_seller_recommendations": None,
             "final_item_scores": None,
             "ranking_explanation": "",
@@ -221,14 +224,14 @@ async def stream_workflow_progress(
 
             # 백그라운드에서 스트림 실행
             states = await loop.run_in_executor(None, run_stream)
-            
+
             # 각 상태를 순차적으로 전송
             for state in states:
                 # state는 딕셔너리 형태로 각 노드의 이름을 키로 가짐
                 for node_name, node_state in state.items():
                     current_step = node_state.get("current_step", "processing")
                     completed_steps = node_state.get("completed_steps", [])
-                    
+
                     # 진행률 계산
                     progress = 0
                     if current_step in step_weights:
@@ -236,7 +239,8 @@ async def stream_workflow_progress(
                     elif len(completed_steps) > 0:
                         # 완료된 단계 수에 따라 진행률 계산
                         total_steps = 4  # init, price, safety, orchestrator
-                        progress = min(int((len(completed_steps) / total_steps) * 100), 90)
+                        progress = min(
+                            int((len(completed_steps) / total_steps) * 100), 90)
 
                     # 단계별 메시지 생성
                     messages = {
@@ -247,7 +251,8 @@ async def stream_workflow_progress(
                         "recommendation_completed": "추천 완료",
                         "error": "오류 발생",
                     }
-                    message = messages.get(current_step, f"{current_step} 처리 중...")
+                    message = messages.get(
+                        current_step, f"{current_step} 처리 중...")
 
                     # 진행 상황 전송
                     progress_data = {
@@ -274,8 +279,9 @@ async def stream_workflow_progress(
                     if current_step == "recommendation_completed":
                         # 실행 시간 계산
                         if node_state.get("execution_start_time"):
-                            node_state["execution_time"] = time.time() - node_state.get("execution_start_time", time.time())
-                        
+                            node_state["execution_time"] = time.time(
+                            ) - node_state.get("execution_start_time", time.time())
+
                         final_data = {
                             "type": "complete",
                             "persona_classification": node_state.get("persona_classification"),
@@ -286,7 +292,7 @@ async def stream_workflow_progress(
                             "session_id": session_id,  # 세션 ID 반환
                         }
                         yield f"data: {json.dumps(final_data, ensure_ascii=False)}\n\n"
-                        
+
                         # Assistant 메시지 저장
                         add_message(
                             session_id=session_id,

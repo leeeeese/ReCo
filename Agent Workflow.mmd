@@ -23,34 +23,42 @@ flowchart TB
       persona, parsed_query"]
 
     %% =======================
-    %% 3) PRICE AGENT
+    %% 3) PRODUCT AGENT
     %% =======================
-    subgraph PriceAgent["Price Agent Node"]
-        priceReason["Reasoning (ReAct)
-        - price_prompt
-        - strategy selection"]
-        priceTools["Tools:
+    subgraph ProductAgent["Product Agent Node"]
+        productReason["Reasoning (ReAct)
+        - product_prompt
+        - 3 core analyses:
+          - Quality pattern
+          - Price strategy
+          - Seller profiling"]
+        productTools["Tools:
         - VectorDB search
         - Product DB lookup
-        - Price estimation tool
+        - Market price tool
         - LLM reasoning (OpenAI)"]
-        priceOutput["Output:
-        price_result (score, reasoning, suggested_price)"]
+        productOutput["Output:
+        product_result (score, reasoning, seller_characteristics)"]
     end
 
     %% =======================
-    %% 4) SAFETY AGENT
+    %% 4) RELIABILITY AGENT
     %% =======================
-    subgraph SafetyAgent["Safety Agent Node"]
-        safetyReason["Reasoning (ReAct)
-        - safety_prompt
-        - fraud pattern analysis"]
-        safetyTools["Tools:
+    subgraph ReliabilityAgent["Reliability Agent Node"]
+        reliabilityReason["Reasoning (ReAct)
+        - reliability_prompt
+        - 4 core analyses:
+          - Transaction behavior
+          - Review personality
+          - Trustworthiness
+          - Activity & credibility"]
+        reliabilityTools["Tools:
         - Seller DB lookup
+        - Review analyzer
         - Risk pattern checker
         - LLM reasoning (OpenAI)"]
-        safetyOutput["Output:
-        safety_result (risk_score, flags, reasoning)"]
+        reliabilityOutput["Output:
+        reliability_result (score, seller_profile_summary, reasoning)"]
     end
 
     %% =======================
@@ -58,9 +66,10 @@ flowchart TB
     %% =======================
     subgraph Orchestrator["Orchestrator Agent"]
         mergeNode["Aggregation Logic:
-        - Combine price + safety
-        - Weighted scoring
-        - Candidate ranking"]
+        - Integrate multi-agent outputs
+        - Fusion of value & reliability scores
+        - Weighted ranking
+        - Buyer-seller matching optimization"]
         finalOutput["Output:
         final_ranking (top-K recommendations)"]
     end
@@ -71,13 +80,13 @@ flowchart TB
 
     userQuery --> initNode --> persona
 
-    initNode --> priceReason
-    initNode --> safetyReason
+    initNode --> productReason
+    initNode --> reliabilityReason
 
-    priceReason --> priceTools --> priceOutput --> priceResult
-    safetyReason --> safetyTools --> safetyOutput --> safetyResult
+    productReason --> productTools --> productOutput --> productResult
+    reliabilityReason --> reliabilityTools --> reliabilityOutput --> reliabilityResult
 
-    priceResult --> mergeNode
-    safetyResult --> mergeNode
+    productResult --> mergeNode
+    reliabilityResult --> mergeNode
 
     mergeNode --> finalOutput --> finalRanking

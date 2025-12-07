@@ -1,7 +1,14 @@
 """
 추천 오케스트레이터
-2개 서브에이전트(가격, 안전거래) 결과를 종합하여
-최종 판매자 추천 및 상품 랭킹을 수행
+2개 서브에이전트(상품 특성 분석, 신뢰도 분석) 결과를 종합하여
+구매자-판매자 매칭 최적화 및 최종 판매자 추천을 수행
+
+주요 기능:
+- Multi-agent outputs 통합
+- Value & reliability scores 융합
+- Weighted ranking & final recommendation
+- 구매자-판매자 매칭 최적화 (판매자 성향 기반)
+- 결정에 대한 설명 생성
 """
 
 from typing import Dict, Any, List
@@ -124,6 +131,11 @@ class OrchestratorAgent:
                         "final_score": final_score_data.get("score", 0.0),
                         "final_reasoning": final_score_data.get("reasoning", ""),
                         "combination_explanation": decision.get("reasoning", ""),
+                        # 판매자 성향 정보 포함 (구매자-판매자 매칭에 사용)
+                        "seller_characteristics": seller.get("seller_characteristics", ""),
+                        "seller_profile_summary": seller.get("seller_profile_summary", ""),
+                        # 매칭 이유
+                        "match_explanation": final_score_data.get("match_explanation", ""),
                     }
                 )
 
@@ -152,6 +164,10 @@ class OrchestratorAgent:
                     "final_score": final_score,
                     "final_reasoning": "LLM 결합 결과가 없거나 비정상이라 상품 특성/신뢰도 점수를 단순 결합하여 산출된 최종 점수입니다.",
                     "combination_explanation": "",
+                    # 판매자 성향 정보 포함
+                    "seller_characteristics": seller.get("seller_characteristics", ""),
+                    "seller_profile_summary": seller.get("seller_profile_summary", ""),
+                    "match_explanation": "",
                 }
             )
 
@@ -168,7 +184,7 @@ class OrchestratorAgent:
         reasoning_key: str,
         source_score_key: str,
     ) -> None:
-        """서브에이전트 결과를 all_sellers에 병합하는 공통 로직 (상품 정보는 제외)"""
+        """서브에이전트 결과를 all_sellers에 병합하는 공통 로직 (판매자 성향 정보 포함)"""
 
         for seller in sellers:
             seller_id = seller.get("seller_id")
@@ -187,6 +203,14 @@ class OrchestratorAgent:
                 source_score_key, 0.0)
             all_sellers[seller_id_str][reasoning_key] = seller.get(
                 reasoning_key, "")
+
+            # 판매자 성향 정보도 병합 (구매자-판매자 매칭에 사용)
+            if "seller_characteristics" in seller:
+                all_sellers[seller_id_str]["seller_characteristics"] = seller.get(
+                    "seller_characteristics", "")
+            if "seller_profile_summary" in seller:
+                all_sellers[seller_id_str]["seller_profile_summary"] = seller.get(
+                    "seller_profile_summary", "")
 
 
 def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
