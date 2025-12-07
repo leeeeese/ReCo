@@ -63,59 +63,85 @@ You CANNOT call tools or APIs yourself. You must use only the fields present in 
 If a field is missing, you must handle it gracefully without failing.
 
 --------------------------------
-2. TASK OVERVIEW
+2. TASK OVERVIEW - 3 CORE ANALYSES
 --------------------------------
 
-For the given user and candidate products/sellers, you must:
+For the given user and candidate products/sellers, you must perform **3 core analyses** for each seller:
 
-1. **Analyze product characteristics comprehensively**
-   For each product that a seller is selling, examine:
-   - **Price characteristics**: 
-     - How does the price compare to market average/median?
-     - Is it cheap, reasonable, or expensive relative to market?
-     - Is it within the user's budget range?
-   - **Condition characteristics**:
-     - Is it new ("새상품") or used ("중고")?
-     - What is the condition level (excellent, good, fair, poor)?
-     - Are there any signs of wear or damage mentioned?
-   - **Quality characteristics**:
-     - Is it authentic/genuine (정품 인증)?
-     - Are all components/accessories included (구성품 완비)?
-     - Is the product description detailed and trustworthy?
-   - **Transaction characteristics**:
-     - What transaction methods are available (direct meet, shipping, safe payment)?
-     - Is the seller responsive and reliable?
+### 1) 판매자의 상품 품질 패턴 분석 (Product Quality Pattern Analysis)
 
-2. **Aggregate to seller-level characteristics**
-   - A seller may have multiple products.
-   - For each seller, analyze the **overall pattern** of their products:
-     - What is the typical price level relative to market? (cheap, reasonable, expensive)
-     - What is the typical condition? (mostly new, mostly used in good condition, mixed, etc.)
-     - What is the typical quality level? (high-quality with authentication, average, etc.)
-     - What is the seller's typical transaction style? (fast shipping, local meet, etc.)
-   
-   - **Determine seller type/characteristics**:
-     Examples:
-     - "좋은 물건을 싸게 파는 사람" (sells good products at cheap prices)
-     - "새상품을 적정가에 파는 사람" (sells new products at reasonable prices)
-     - "상태 좋은 중고를 파는 사람" (sells well-maintained used products)
-     - "프리미엄 상품을 파는 사람" (sells premium/high-end products)
-     - "가성비 좋은 상품을 파는 사람" (sells products with good value for money)
-     - "안전거래 중심의 신뢰할 수 있는 판매자" (trustworthy seller focused on safe transactions)
-     - etc.
+Analyze "이 판매자는 어떤 수준의 상품을 주로 판매하는가?"
 
-3. **Match seller characteristics to user needs**
+For each seller, examine all their products and determine:
+- **상품 상태 패턴**:
+  - 대부분 새상품 수준인가? ("새상품", "미개봉" 등)
+  - 사용감이 큰 상품을 자주 판매하는가? ("사용감 있음", "하자 있음" 등)
+  - 상태가 좋은 중고를 판매하는가? ("중고 양호", "깨끗함" 등)
+  - 품질 수준이 일관적인가? (모두 고품질 vs 모두 저품질 vs 혼재)
+- **품질 지표**:
+  - 정품 인증 여부 (대부분 정품인가?)
+  - 구성품 완비도 (대부분 완비되어 있는가?)
+  - 상품 설명의 상세도와 신뢰성
+
+**Output**: 판매자의 상품 품질 패턴 요약
+- 예: "대부분 새상품 수준 → 퀄리티 높은 상품을 파는 사람"
+- 예: "사용감이 큰 상품을 자주 판매 → 저가형 위주 판매자"
+- 예: "상태 좋은 중고를 일관되게 판매 → 중고 전문 판매자"
+
+### 2) 시세 대비 가격 전략 분석 (Price Strategy vs Market Analysis)
+
+Analyze "이 판매자는 평소에 싸게 파는가, 비싸게 파는가?"
+
+For each seller, examine all their products' prices relative to market:
+- **시세 대비 가격 패턴**:
+  - 각 상품의 `current_price`를 `market_avg`, `market_median`과 비교
+  - 판매자가 올린 모든 상품의 시세 대비 가격 편차를 종합 분석
+  - 일관된 가격 전략이 있는가? (항상 싸게 vs 항상 비싸게 vs 적정가)
+- **상품 상태와 가격의 조합 분석**:
+  - 새상품인데도 시세보다 싸게 판매하는가? → "가성비 좋게 파는 판매자"
+  - 중고인데 시세보다 비싸게 판매하는가? → "프리미엄 가격을 잡는 판매자"
+  - 상태에 따라 가격이 적절히 조정되는가? → "합리적 가격 정책의 판매자"
+  - 상태와 관계없이 항상 저렴한가? → "저가 중심 판매자"
+
+**Output**: 판매자의 가격 전략 요약
+- 예: "새상품인데도 시세보다 싸게 판매 → 가성비 좋게 파는 판매자"
+- 예: "중고인데 시세보다 비싸게 판매 → 프리미엄 가격을 잡는 판매자"
+- 예: "시세와 유사한 적정가 유지 → 합리적 가격 정책의 판매자"
+
+### 3) 판매자 성향 도출 (Seller Profiling)
+
+Combine 상품 품질 패턴 + 시세 대비 가격 전략 to determine "이 판매자가 어떤 성향의 사람인지"
+
+For each seller, synthesize the two analyses above:
+- **종합 판매자 프로파일링**:
+  - 상품 상태 패턴과 가격 전략을 결합하여 판매자 성향 도출
+  - Examples:
+    - "좋은 물건을 싸게 파는 판매자" (새상품/상태 좋음 + 시세 대비 저렴)
+    - "상태 좋은 물건을 적정가에 파는 판매자" (상태 좋음 + 시세 대비 적정)
+    - "저가 상품을 대량 판매하는 판매자" (사용감 있음 + 시세 대비 매우 저렴)
+    - "프리미엄 상품 전문 판매자" (새상품/고품질 + 시세 대비 높음)
+    - "가성비 중심 판매자" (상태 좋은 중고 + 시세 대비 저렴)
+    - "합리적 가격 정책의 판매자" (다양한 상태 + 시세 대비 적정)
+
+**Output**: 판매자 성향 프로파일 (1-2 sentences in Korean)
+- Must clearly state what kind of seller they are based on quality pattern + price strategy
+
+4. **Match seller characteristics to user needs**
    - Based on the user's persona and preferences, determine which seller types would be a good match:
      - `price_sensible` users → match with sellers who sell good products at cheap/reasonable prices
+       - "좋은 물건을 싸게 파는 판매자", "가성비 좋게 파는 판매자" → 높은 점수
      - `quality_oriented` users → match with sellers who sell high-quality, well-maintained, or new products
+       - "퀄리티 높은 상품을 파는 사람", "새상품을 적정가에 파는 사람" → 높은 점수
      - `risk_averse` users → match with trustworthy sellers with safe transaction methods
+       - 신뢰도 높은 판매자 우선
      - `balanced` users → match with sellers who offer a good balance of price, quality, and safety
+       - "상태 좋은 물건을 적정가에 파는 판매자" → 높은 점수
    
    - Consider:
-     - Does the seller's product characteristics align with what the user is looking for?
+     - Does the seller's product characteristics (from the 3 analyses above) align with what the user is looking for?
      - Example: If a user wants "좋은 물건을 싸게 사고 싶다" and a seller is "좋은 물건을 싸게 파는 사람", that's a perfect match!
 
-4. **Compute a numerical product score per seller (0.0–1.0)**
+5. **Compute a numerical product score per seller (0.0–1.0)**
    - Score meaning:
      - 0.9–1.0: 판매자의 상품 특성이 사용자 니즈와 매우 잘 맞음 + 신뢰도 높음
      - 0.7–0.89: 판매자의 상품 특성이 사용자 니즈와 잘 맞고 선택할 만함
@@ -128,14 +154,16 @@ For the given user and candidate products/sellers, you must:
      - 판매자 신뢰도, 리뷰 평가
      - 사용자 예산 범위 내 상품 비율
 
-5. **Determine seller characteristics description**
-   - For each seller, provide a concise description (in Korean) of what kind of seller they are:
-     - "이 판매자는 시세 대비 저렴한 가격에 새상품을 판매하는 사람입니다."
-     - "이 판매자는 상태가 좋은 중고 상품을 적정가에 판매하는 사람입니다."
-     - "이 판매자는 프리미엄 상품을 판매하지만 가격이 다소 높은 편입니다."
-     - etc.
+6. **Determine seller characteristics description**
+   - For each seller, provide a concise description (in Korean) based on the 3 analyses above:
+     - Must include: 상품 품질 패턴 + 시세 대비 가격 전략 + 종합 판매자 성향
+     - Examples:
+       - "이 판매자는 시세 대비 저렴한 가격에 새상품을 판매하는 사람입니다. 좋은 물건을 싸게 파는 판매자입니다."
+       - "이 판매자는 상태가 좋은 중고 상품을 적정가에 판매하는 사람입니다. 합리적 가격 정책의 판매자입니다."
+       - "이 판매자는 프리미엄 상품을 판매하지만 가격이 시세 대비 다소 높은 편입니다. 프리미엄 상품 전문 판매자입니다."
+       - "이 판매자는 사용감이 큰 상품을 시세 대비 매우 저렴하게 판매합니다. 저가 상품을 대량 판매하는 판매자입니다."
 
-6. **Determine recommended price range per seller**
+7. **Determine recommended price range per seller**
    - For each seller, compute a recommended price range reflecting:
      - The typical reasonable prices among this seller's products.
      - The surrounding market price statistics.
@@ -144,14 +172,15 @@ For the given user and candidate products/sellers, you must:
      - `price_range.min`: lowest reasonable price you'd recommend for this seller (KRW)
      - `price_range.max`: highest reasonable price you'd recommend for this seller (KRW)
 
-7. **Produce concise Korean reasoning**
+8. **Produce concise Korean reasoning**
    For each seller:
    - Briefly explain **why** the product score was assigned, in Korean.
-   - Mention at least:
-     - 판매자가 파는 상품들의 종합적 특성 (가격, 상태, 품질 등)
-     - 판매자 유형/특성 ("이 판매자는 ~한 특성의 상품을 파는 사람입니다")
+   - Must mention at least:
+     - **상품 품질 패턴**: 판매자가 주로 어떤 수준의 상품을 판매하는가?
+     - **시세 대비 가격 전략**: 판매자가 평소에 싸게 파는가, 비싸게 파는가?
+     - **판매자 성향**: 상품 상태 + 시세 대비 가격을 종합한 판매자 프로파일
      - 사용자 니즈와의 매칭 적합도
-     - 판매자 신뢰도/리뷰가 판단에 미친 영향
+     - 판매자 신뢰도/리뷰가 판단에 미친 영향 (보조적 정보)
 
    Also provide an **overall Korean summary** in the top-level `reasoning` field:
    - 3~6줄 정도로:
@@ -159,7 +188,7 @@ For the given user and candidate products/sellers, you must:
      - 사용자 니즈와 잘 맞는 판매자 유형
      - 특이사항
 
-8. **Set a global confidence score (0.0–1.0)**
+9. **Set a global confidence score (0.0–1.0)**
    - Confidence should reflect:
      - Amount and consistency of product data.
      - 유의미한 상품 개수.
@@ -253,9 +282,9 @@ Example (structure only; content is dummy):
         "min": 55000,
         "max": 60000
       },
-      "reasoning": "판매자가 판매하는 상품들은 정품 인증이 되어 있고 구성품이 완비되어 있으며, 판매자 평판도 우수합니다. 다만 가격이 시세 대비 약간 높은 편이어서 가격 민감도가 높은 사용자에게는 다소 아쉬울 수 있습니다."
+      "reasoning": "판매자가 판매하는 상품들의 품질 패턴을 보면 정품 인증이 되어 있고 구성품이 완비된 프리미엄 상품 위주로, 퀄리티 높은 상품을 파는 사람입니다. 시세 대비 가격 전략을 보면 시세 대비 약간 높은 가격대를 유지하여 프리미엄 가격을 잡는 판매자입니다. 종합하면 프리미엄 상품 전문 판매자로, 품질과 신뢰도를 중시하는 사용자에게 적합하지만 가격 민감도가 높은 사용자에게는 다소 아쉬울 수 있습니다."
     }
   ],
-  "reasoning": "전체적으로 다양한 특성의 판매자들이 존재합니다. 일부 판매자는 시세 대비 저렴한 가격에 좋은 품질의 상품을 판매하여 가성비를 중시하는 사용자에게 적합하고, 다른 판매자들은 프리미엄 상품을 판매하여 품질을 중시하는 사용자에게 적합합니다. 사용자의 페르소나에 따라 적합한 판매자를 우선 추천하였습니다.",
+  "reasoning": "전체적으로 다양한 특성의 판매자들이 존재합니다. 일부 판매자는 품질 패턴이 높은 수준(새상품/상태 좋음)이고 시세 대비 가격 전략이 저렴하여 '좋은 물건을 싸게 파는 판매자'로, 가성비를 중시하는 사용자에게 적합합니다. 다른 판매자들은 품질 패턴이 프리미엄 수준이고 시세 대비 가격이 높아 '프리미엄 상품 전문 판매자'로, 품질을 중시하는 사용자에게 적합합니다. 사용자의 페르소나에 따라 적합한 판매자를 우선 추천하였습니다.",
   "confidence": 0.85
 }

@@ -1,7 +1,7 @@
 """
-안전거래 에이전트
-LLM 기반으로 거래 방식, 결제 안전도, 판매자 신뢰도를 종합하여
-사용자와 가장 잘 어울리는 안전한 판매자를 추천
+신뢰도 분석 에이전트
+LLM 기반으로 판매자의 거래 행동 패턴, 리뷰 기반 성향, 신뢰도, 활동성을 종합 분석하여
+판매자를 프로파일링하고 사용자와 가장 잘 어울리는 신뢰할 수 있는 판매자를 추천
 """
 
 from typing import Dict, Any, List
@@ -18,33 +18,33 @@ from server.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class SafetyAgent:
-    """안전거래 에이전트 - LLM 기반 자율 판단"""
+class ReliabilityAgent:
+    """신뢰도 분석 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        self.llm_agent = create_agent("safety_agent")
-        self.safety_prompt = load_prompt("safety_prompt")
+        self.llm_agent = create_agent("reliability_agent")
+        self.reliability_prompt = load_prompt("reliability_prompt")
 
-    def recommend_sellers_by_safety(
+    def recommend_sellers_by_reliability(
         self,
         user_input: Dict[str, Any],
         sellers_with_products: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        안전거래 관점에서 판매자 추천
+        신뢰도 관점에서 판매자 추천 및 프로파일링
 
         Args:
-            user_input: 사용자 입력 (안전거래 선호도 포함)
+            user_input: 사용자 입력 (신뢰도 선호도 포함)
             sellers_with_products: 판매자와 상품 정보
 
         Returns:
-            안전거래 점수와 함께 판매자 리스트
+            신뢰도 점수와 함께 판매자 리스트
         """
 
         # -------------------------------------------------------------
         # 🔥 1) seller_profile_tool / review_feature_tool / trade_risk_tool 적용
         # -------------------------------------------------------------
-        seller_safety_data: List[Dict[str, Any]] = []
+        seller_reliability_data: List[Dict[str, Any]] = []
 
         for seller in sellers_with_products:
             seller_id = seller.get("seller_id")
@@ -70,7 +70,7 @@ class SafetyAgent:
                 trade_risk = trade_risk_tool(product_id)
                 product_trade_risks[str(product_id)] = trade_risk
 
-            seller_safety_data.append(
+            seller_reliability_data.append(
                 {
                     "seller_id": seller_id,
                     "seller_name": seller_name,
@@ -90,7 +90,7 @@ class SafetyAgent:
             "user_persona": user_input.get("persona_type"),
 
             # tools 기반 구조화 피처
-            "sellers_safety_view": seller_safety_data,
+            "sellers_reliability_view": seller_reliability_data,
         }
 
         # -------------------------------------------------------------
@@ -98,7 +98,7 @@ class SafetyAgent:
         # -------------------------------------------------------------
         decision = self.llm_agent.decide(
             context=context,
-            decision_task=self.safety_prompt,
+            decision_task=self.reliability_prompt,
             format="json",
         )
 
@@ -116,9 +116,10 @@ class SafetyAgent:
                 {
                     "seller_id": seller_id,
                     "seller_name": seller.get("seller_name"),
-                    "safety_score": seller_score.get("score", 0.5),
-                    "safety_reasoning": seller_score.get("reasoning", ""),
-                    "safety_features_matched": seller_score.get(
+                    "reliability_score": seller_score.get("score", 0.5),
+                    "reliability_reasoning": seller_score.get("reasoning", ""),
+                    "seller_profile_summary": seller_score.get("seller_profile_summary", ""),
+                    "reliability_features_matched": seller_score.get(
                         "matched_features", []
                     ),
                     "trust_level": seller_score.get("trust_level", "medium"),
@@ -126,21 +127,22 @@ class SafetyAgent:
                 }
             )
 
-        # 안전거래 점수 기준 정렬
-        recommended_sellers.sort(key=lambda x: x["safety_score"], reverse=True)
+        # 신뢰도 점수 기준 정렬
+        recommended_sellers.sort(
+            key=lambda x: x["reliability_score"], reverse=True)
 
         return recommended_sellers
 
 
-def safety_agent_node(state: RecommendationState) -> RecommendationState:
-    """안전거래 에이전트 노드"""
+def reliability_agent_node(state: RecommendationState) -> RecommendationState:
+    """신뢰도 분석 에이전트 노드"""
     try:
         user_input = state["user_input"]
 
-        # 안전거래 에이전트 실행
-        agent = SafetyAgent()
+        # 신뢰도 분석 에이전트 실행
+        agent = ReliabilityAgent()
 
-        # DB에서 조회 (price_agent와 동일한 로직)
+        # DB에서 조회 (product_agent와 동일한 로직)
         from server.db.product_service import (
             get_sellers_with_products,
             search_products_by_keywords,
@@ -179,7 +181,7 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
                 )
 
             logger.info(
-                "안전거래 분석용 판매자 조회 완료",
+                "신뢰도 분석용 판매자 조회 완료",
                 extra={
                     "seller_count": len(sellers_with_products) if sellers_with_products else 0,
                     "has_keywords": bool(keywords),
@@ -204,7 +206,7 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
                     price_max=None,
                     limit=50
                 )
-                
+
                 if not sellers_with_products:
                     # DB에 상품이 있는지 확인
                     from server.db.database import SessionLocal
@@ -213,45 +215,48 @@ def safety_agent_node(state: RecommendationState) -> RecommendationState:
                     try:
                         total_count = db.query(Product).count()
                         if total_count == 0:
-                            raise ValueError("DB에 상품 데이터가 없습니다. CSV 파일을 먼저 마이그레이션해주세요.")
+                            raise ValueError(
+                                "DB에 상품 데이터가 없습니다. CSV 파일을 먼저 마이그레이션해주세요.")
                         else:
-                            raise ValueError(f"검색 조건이 너무 엄격합니다. (DB에 총 {total_count}개 상품 존재)")
+                            raise ValueError(
+                                f"검색 조건이 너무 엄격합니다. (DB에 총 {total_count}개 상품 존재)")
                     finally:
                         db.close()
         except Exception as e:
-            logger.exception("안전거래 에이전트 DB 조회 실패")
-            raise ValueError(f"안전거래 에이전트 데이터 조회 실패: {str(e)}")
+            logger.exception("신뢰도 분석 에이전트 DB 조회 실패")
+            raise ValueError(f"신뢰도 분석 에이전트 데이터 조회 실패: {str(e)}")
 
-        # 안전거래 관점에서 판매자 추천
-        safety_recommendations = agent.recommend_sellers_by_safety(
+        # 신뢰도 관점에서 판매자 추천
+        reliability_recommendations = agent.recommend_sellers_by_reliability(
             user_input,
             sellers_with_products,
         )
 
         # 결과를 상태에 저장 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
         logger.info(
-            "안전거래 에이전트 분석 완료",
-            extra={"recommended_sellers": len(safety_recommendations)},
+            "신뢰도 분석 에이전트 분석 완료",
+            extra={"recommended_sellers": len(reliability_recommendations)},
         )
 
         # completed_steps는 add reducer를 사용하므로 리스트로 반환
         # current_step은 병렬 실행 중 충돌 방지를 위해 설정하지 않음 (orchestrator에서 설정)
         return {
-            "safety_agent_recommendations": {
-                "recommended_sellers": safety_recommendations,
-                "reasoning": "안전거래 관점에서 신뢰할 수 있는 판매자 추천 완료",
+            "reliability_agent_recommendations": {
+                "recommended_sellers": reliability_recommendations,
+                "reasoning": "신뢰도 관점에서 신뢰할 수 있는 판매자 프로파일링 및 추천 완료",
             },
-            "completed_steps": ["safety_analysis"],  # add reducer가 기존 리스트와 병합
+            # add reducer가 기존 리스트와 병합
+            "completed_steps": ["reliability_analysis"],
         }
 
     except Exception as e:
-        logger.exception("안전거래 에이전트 오류")
+        logger.exception("신뢰도 분석 에이전트 오류")
         # 병렬 실행 중 error_message, current_step 충돌 방지: 각 노드의 결과에 에러 정보 포함
         return {
-            "safety_agent_recommendations": {
+            "reliability_agent_recommendations": {
                 "recommended_sellers": [],
                 "reasoning": "",
-                "error": f"안전거래 에이전트 오류: {str(e)}",
+                "error": f"신뢰도 분석 에이전트 오류: {str(e)}",
             },
-            "completed_steps": ["safety_analysis"],
+            "completed_steps": ["reliability_analysis"],
         }

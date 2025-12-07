@@ -26,7 +26,7 @@ class OrchestratorAgent:
     def combine_and_rank(
         self,
         product_results: Dict[str, Any],
-        safety_results: Dict[str, Any],
+        reliability_results: Dict[str, Any],
         user_input: Dict[str, Any],
         persona_classification: Dict[str, Any],
     ) -> Dict[str, Any]:
@@ -41,15 +41,15 @@ class OrchestratorAgent:
             "user_input": user_input,
             "persona_classification": persona_classification,
         }
-        safety_results_with_ctx = {
-            **safety_results,
+        reliability_results_with_ctx = {
+            **reliability_results,
             "user_input": user_input,
             "persona_classification": persona_classification,
         }
 
         # 2개 서브에이전트 결과 종합하여 판매자 추천 (상위 10명)
         final_sellers = self._combine_sub_agent_results(
-            product_results_with_ctx, safety_results_with_ctx
+            product_results_with_ctx, reliability_results_with_ctx
         )
 
         return {
@@ -59,20 +59,20 @@ class OrchestratorAgent:
     def _combine_sub_agent_results(
         self,
         product_results: Dict[str, Any],
-        safety_results: Dict[str, Any],
+        reliability_results: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """
         2개 서브에이전트 결과 종합
 
         - 1차: LLM(final_matcher)의 analyze_and_combine 결과 사용
-        - 2차: LLM 출력이 없거나 비정상일 경우, 상품 특성/안전 점수를 단순 결합한 fallback 사용
+        - 2차: LLM 출력이 없거나 비정상일 경우, 상품 특성/신뢰도 점수를 단순 결합한 fallback 사용
         """
 
         # 1) LLM에 서브에이전트 결과 전달
         decision = self.llm_agent.analyze_and_combine(
             sub_agent_results=[
                 {"agent": "product", "results": product_results},
-                {"agent": "safety", "results": safety_results},
+                {"agent": "reliability", "results": reliability_results},
             ],
             combination_task=self.combine_sellers_prompt,
         )
@@ -90,10 +90,10 @@ class OrchestratorAgent:
 
         self._merge_seller_results(
             all_sellers,
-            safety_results.get("recommended_sellers", []),
-            score_key="safety_score",
-            reasoning_key="safety_reasoning",
-            source_score_key="safety_score",
+            reliability_results.get("recommended_sellers", []),
+            score_key="reliability_score",
+            reasoning_key="reliability_reasoning",
+            source_score_key="reliability_score",
         )
 
         # 3) LLM 결합 결과 파싱
@@ -120,7 +120,7 @@ class OrchestratorAgent:
                         "seller_id": seller["seller_id"],
                         "seller_name": seller["seller_name"],
                         "product_score": seller.get("product_score", 0.0),
-                        "safety_score": seller.get("safety_score", 0.0),
+                        "reliability_score": seller.get("reliability_score", 0.0),
                         "final_score": final_score_data.get("score", 0.0),
                         "final_reasoning": final_score_data.get("reasoning", ""),
                         "combination_explanation": decision.get("reasoning", ""),
@@ -133,24 +133,24 @@ class OrchestratorAgent:
             return final_recommendations[:10]
 
         # 4) 🔥 Fallback: LLM 결합 결과가 비었거나 이상한 경우
-        #    → 상품 특성/안전 점수를 단순 결합해서 final_score 산출
+        #    → 상품 특성/신뢰도 점수를 단순 결합해서 final_score 산출
         fallback_recommendations: List[Dict[str, Any]] = []
 
         for seller_id_str, seller in all_sellers.items():
             product_score = float(seller.get("product_score", 0.0))
-            safety_score = float(seller.get("safety_score", 0.0))
+            reliability_score = float(seller.get("reliability_score", 0.0))
 
             # 기본은 단순 평균 (원하면 나중에 가중치 추가 가능)
-            final_score = (product_score + safety_score) / 2.0
+            final_score = (product_score + reliability_score) / 2.0
 
             fallback_recommendations.append(
                 {
                     "seller_id": seller["seller_id"],
                     "seller_name": seller.get("seller_name"),
                     "product_score": product_score,
-                    "safety_score": safety_score,
+                    "reliability_score": reliability_score,
                     "final_score": final_score,
-                    "final_reasoning": "LLM 결합 결과가 없거나 비정상이라 상품 특성/안전 점수를 단순 결합하여 산출된 최종 점수입니다.",
+                    "final_reasoning": "LLM 결합 결과가 없거나 비정상이라 상품 특성/신뢰도 점수를 단순 결합하여 산출된 최종 점수입니다.",
                     "combination_explanation": "",
                 }
             )
@@ -193,19 +193,20 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
     """추천 오케스트레이터 노드"""
     try:
         product_results = state.get("product_agent_recommendations", {})
-        safety_results = state.get("safety_agent_recommendations", {})
+        reliability_results = state.get(
+            "reliability_agent_recommendations", {})
 
         # 서브에이전트 에러 확인
         product_error = product_results.get(
             "error") if isinstance(product_results, dict) else None
-        safety_error = safety_results.get("error") if isinstance(
-            safety_results, dict) else None
+        reliability_error = reliability_results.get("error") if isinstance(
+            reliability_results, dict) else None
 
         error_messages = []
         if product_error:
             error_messages.append(f"상품 특성 분석 에이전트: {product_error}")
-        if safety_error:
-            error_messages.append(f"안전거래 에이전트: {safety_error}")
+        if reliability_error:
+            error_messages.append(f"신뢰도 분석 에이전트: {reliability_error}")
 
         if error_messages:
             return {
@@ -214,7 +215,7 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
                 "completed_steps": ["recommendation"],
             }
 
-        if not product_results or not safety_results:
+        if not product_results or not reliability_results:
             raise ValueError("서브에이전트 결과가 완료되지 않았습니다.")
 
         user_input = state.get("user_input")
@@ -223,7 +224,7 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
         orchestrator = OrchestratorAgent()
         result = orchestrator.combine_and_rank(
             product_results,
-            safety_results,
+            reliability_results,
             user_input,
             persona_classification,
         )

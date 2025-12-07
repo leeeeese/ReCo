@@ -6,7 +6,7 @@ from langgraph.graph import StateGraph, END
 from server.workflow.state import RecommendationState
 from server.workflow.agents import (
     product_agent_node,
-    safety_agent_node,
+    reliability_agent_node,
     orchestrator_agent_node,
 )
 from server.utils.workflow_utils import classify_persona, generate_search_query
@@ -52,7 +52,7 @@ def recommendation_workflow() -> StateGraph:
 
     # 2개 서브에이전트
     workflow.add_node("product_agent", product_agent_node)
-    workflow.add_node("safety_agent", safety_agent_node)
+    workflow.add_node("reliability_agent", reliability_agent_node)
 
     # 추천 오케스트레이터 (2개 결과 종합 및 랭킹)
     workflow.add_node("orchestrator_agent", orchestrator_agent_node)
@@ -63,11 +63,11 @@ def recommendation_workflow() -> StateGraph:
 
     # 초기화 → 2개 서브에이전트 병렬 실행
     workflow.add_edge("init", "product_agent")
-    workflow.add_edge("init", "safety_agent")
+    workflow.add_edge("init", "reliability_agent")
 
     # 2개 서브에이전트 완료 후 오케스트레이터
     workflow.add_edge("product_agent", "orchestrator_agent")
-    workflow.add_edge("safety_agent", "orchestrator_agent")
+    workflow.add_edge("reliability_agent", "orchestrator_agent")
 
     # 오케스트레이터 완료
     workflow.add_edge("orchestrator_agent", END)
