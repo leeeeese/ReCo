@@ -55,7 +55,7 @@ class RecommendationState(TypedDict):
     persona_classification: Optional[Dict[str, Any]]
 
     # 서브에이전트 결과
-    price_agent_recommendations: Optional[Dict[str, Any]]
+    product_agent_recommendations: Optional[Dict[str, Any]]
     safety_agent_recommendations: Optional[Dict[str, Any]]
 
     # 최종 결과

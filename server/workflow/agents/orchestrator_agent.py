@@ -25,7 +25,7 @@ class OrchestratorAgent:
 
     def combine_and_rank(
         self,
-        price_results: Dict[str, Any],
+        product_results: Dict[str, Any],
         safety_results: Dict[str, Any],
         user_input: Dict[str, Any],
         persona_classification: Dict[str, Any],
@@ -36,8 +36,8 @@ class OrchestratorAgent:
         """
 
         # user_input / persona 맥락을 서브에이전트 결과에 태워서 전달 (LLM이 trade-off 판단하기 좋게)
-        price_results_with_ctx = {
-            **price_results,
+        product_results_with_ctx = {
+            **product_results,
             "user_input": user_input,
             "persona_classification": persona_classification,
         }
@@ -49,7 +49,7 @@ class OrchestratorAgent:
 
         # 2개 서브에이전트 결과 종합하여 판매자 추천 (상위 10명)
         final_sellers = self._combine_sub_agent_results(
-            price_results_with_ctx, safety_results_with_ctx
+            product_results_with_ctx, safety_results_with_ctx
         )
 
         return {
@@ -58,20 +58,20 @@ class OrchestratorAgent:
 
     def _combine_sub_agent_results(
         self,
-        price_results: Dict[str, Any],
+        product_results: Dict[str, Any],
         safety_results: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """
         2개 서브에이전트 결과 종합
 
         - 1차: LLM(final_matcher)의 analyze_and_combine 결과 사용
-        - 2차: LLM 출력이 없거나 비정상일 경우, 가격/안전 점수를 단순 결합한 fallback 사용
+        - 2차: LLM 출력이 없거나 비정상일 경우, 상품 특성/안전 점수를 단순 결합한 fallback 사용
         """
 
         # 1) LLM에 서브에이전트 결과 전달
         decision = self.llm_agent.analyze_and_combine(
             sub_agent_results=[
-                {"agent": "price", "results": price_results},
+                {"agent": "product", "results": product_results},
                 {"agent": "safety", "results": safety_results},
             ],
             combination_task=self.combine_sellers_prompt,
@@ -82,10 +82,10 @@ class OrchestratorAgent:
 
         self._merge_seller_results(
             all_sellers,
-            price_results.get("recommended_sellers", []),
-            score_key="price_score",
-            reasoning_key="price_reasoning",
-            source_score_key="price_score",
+            product_results.get("recommended_sellers", []),
+            score_key="product_score",
+            reasoning_key="product_reasoning",
+            source_score_key="product_score",
         )
 
         self._merge_seller_results(
@@ -119,7 +119,7 @@ class OrchestratorAgent:
                     {
                         "seller_id": seller["seller_id"],
                         "seller_name": seller["seller_name"],
-                        "price_score": seller.get("price_score", 0.0),
+                        "product_score": seller.get("product_score", 0.0),
                         "safety_score": seller.get("safety_score", 0.0),
                         "final_score": final_score_data.get("score", 0.0),
                         "final_reasoning": final_score_data.get("reasoning", ""),
@@ -133,24 +133,24 @@ class OrchestratorAgent:
             return final_recommendations[:10]
 
         # 4) 🔥 Fallback: LLM 결합 결과가 비었거나 이상한 경우
-        #    → 가격/안전 점수를 단순 결합해서 final_score 산출
+        #    → 상품 특성/안전 점수를 단순 결합해서 final_score 산출
         fallback_recommendations: List[Dict[str, Any]] = []
 
         for seller_id_str, seller in all_sellers.items():
-            price_score = float(seller.get("price_score", 0.0))
+            product_score = float(seller.get("product_score", 0.0))
             safety_score = float(seller.get("safety_score", 0.0))
 
             # 기본은 단순 평균 (원하면 나중에 가중치 추가 가능)
-            final_score = (price_score + safety_score) / 2.0
+            final_score = (product_score + safety_score) / 2.0
 
             fallback_recommendations.append(
                 {
                     "seller_id": seller["seller_id"],
                     "seller_name": seller.get("seller_name"),
-                    "price_score": price_score,
+                    "product_score": product_score,
                     "safety_score": safety_score,
                     "final_score": final_score,
-                    "final_reasoning": "LLM 결합 결과가 없거나 비정상이라 가격/안전 점수를 단순 결합하여 산출된 최종 점수입니다.",
+                    "final_reasoning": "LLM 결합 결과가 없거나 비정상이라 상품 특성/안전 점수를 단순 결합하여 산출된 최종 점수입니다.",
                     "combination_explanation": "",
                 }
             )
@@ -189,23 +189,24 @@ class OrchestratorAgent:
                 reasoning_key, "")
 
 
-
 def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
     """추천 오케스트레이터 노드"""
     try:
-        price_results = state.get("price_agent_recommendations", {})
+        product_results = state.get("product_agent_recommendations", {})
         safety_results = state.get("safety_agent_recommendations", {})
 
         # 서브에이전트 에러 확인
-        price_error = price_results.get("error") if isinstance(price_results, dict) else None
-        safety_error = safety_results.get("error") if isinstance(safety_results, dict) else None
-        
+        product_error = product_results.get(
+            "error") if isinstance(product_results, dict) else None
+        safety_error = safety_results.get("error") if isinstance(
+            safety_results, dict) else None
+
         error_messages = []
-        if price_error:
-            error_messages.append(f"가격 에이전트: {price_error}")
+        if product_error:
+            error_messages.append(f"상품 특성 분석 에이전트: {product_error}")
         if safety_error:
             error_messages.append(f"안전거래 에이전트: {safety_error}")
-        
+
         if error_messages:
             return {
                 "error_message": "; ".join(error_messages),
@@ -213,7 +214,7 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
                 "completed_steps": ["recommendation"],
             }
 
-        if not price_results or not safety_results:
+        if not product_results or not safety_results:
             raise ValueError("서브에이전트 결과가 완료되지 않았습니다.")
 
         user_input = state.get("user_input")
@@ -221,7 +222,7 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
 
         orchestrator = OrchestratorAgent()
         result = orchestrator.combine_and_rank(
-            price_results,
+            product_results,
             safety_results,
             user_input,
             persona_classification,
@@ -248,7 +249,7 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
 
         # 상품 매칭은 룰베이스로 처리
         from server.utils.tools import match_products_to_sellers
-        
+
         sellers_with_products = match_products_to_sellers(
             recommended_sellers=result["final_seller_recommendations"],
             user_input=user_input,
@@ -256,7 +257,7 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             min_products_per_seller=5,
             max_products_per_seller=10
         )
-        
+
         # 모든 판매자가 상품이 없는 경우 예외 처리
         if not sellers_with_products:
             logger.warning(
@@ -273,16 +274,17 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
                 "current_step": "recommendation_completed",
                 "completed_steps": ["recommendation"],
             }
-        
+
         # 상품 리스트를 평탄화하여 final_item_scores 생성
         all_products = []
         for seller in sellers_with_products:
             products = seller.get("products", [])
             if products:  # 상품이 있는 경우만 추가
                 all_products.extend(products)
-        
+
         # 상품을 match_score 순으로 정렬
-        all_products.sort(key=lambda x: x.get("match_score", 0.0), reverse=True)
+        all_products.sort(key=lambda x: x.get(
+            "match_score", 0.0), reverse=True)
 
         # 새로운 state 반환 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
         # completed_steps는 add reducer를 사용하므로 리스트로 반환
