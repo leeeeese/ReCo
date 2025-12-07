@@ -8,7 +8,7 @@ import { Slider } from "./ui/slider";
 import { Send, Mic, Sparkles } from "lucide-react";
 import ProductCard from "./ProductCard";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
-import logo from "figma:asset/be4e933247d398b35fc960ad2df357273b46c0e1.png";
+import logo from "./ReCo Logo.png";
 
 type ChatInterfaceProps = {
   onNavigate: (
