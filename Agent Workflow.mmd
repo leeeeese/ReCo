@@ -1,0 +1,83 @@
+flowchart TB
+
+    %% =======================
+    %% 1) INPUT & SHARED STATE
+    %% =======================
+    subgraph SharedState["Global State (Graph State)"]
+        userQuery["user_query"]
+        persona["persona"]
+        itemCandidates["item_candidates"]
+        priceResult["price_result"]
+        safetyResult["safety_result"]
+        finalRanking["final_ranking"]
+    end
+
+    %% =======================
+    %% 2) INIT NODE
+    %% =======================
+    initNode["Init Node
+    - Query normalization
+    - Category parsing
+    - Persona detection
+    Output:
+      persona, parsed_query"]
+
+    %% =======================
+    %% 3) PRICE AGENT
+    %% =======================
+    subgraph PriceAgent["Price Agent Node"]
+        priceReason["Reasoning (ReAct)
+        - price_prompt
+        - strategy selection"]
+        priceTools["Tools:
+        - VectorDB search
+        - Product DB lookup
+        - Price estimation tool
+        - LLM reasoning (OpenAI)"]
+        priceOutput["Output:
+        price_result (score, reasoning, suggested_price)"]
+    end
+
+    %% =======================
+    %% 4) SAFETY AGENT
+    %% =======================
+    subgraph SafetyAgent["Safety Agent Node"]
+        safetyReason["Reasoning (ReAct)
+        - safety_prompt
+        - fraud pattern analysis"]
+        safetyTools["Tools:
+        - Seller DB lookup
+        - Risk pattern checker
+        - LLM reasoning (OpenAI)"]
+        safetyOutput["Output:
+        safety_result (risk_score, flags, reasoning)"]
+    end
+
+    %% =======================
+    %% 5) ORCHESTRATOR AGENT
+    %% =======================
+    subgraph Orchestrator["Orchestrator Agent"]
+        mergeNode["Aggregation Logic:
+        - Combine price + safety
+        - Weighted scoring
+        - Candidate ranking"]
+        finalOutput["Output:
+        final_ranking (top-K recommendations)"]
+    end
+
+    %% =======================
+    %% DATA FLOW
+    %% =======================
+
+    userQuery --> initNode --> persona
+
+    initNode --> priceReason
+    initNode --> safetyReason
+
+    priceReason --> priceTools --> priceOutput --> priceResult
+    safetyReason --> safetyTools --> safetyOutput --> safetyResult
+
+    priceResult --> mergeNode
+    safetyResult --> mergeNode
+
+    mergeNode --> finalOutput --> finalRanking

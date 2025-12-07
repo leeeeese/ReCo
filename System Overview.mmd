@@ -1,0 +1,34 @@
+---
+config:
+  theme: default
+  layout: elk
+---
+flowchart TB
+ subgraph PresentationLayer["Presentation Layer / Frontend UI"]
+        user["사용자 입력 / Browser UI"]
+        reactUI["React Frontend / Session & UI Rendering"]
+  end
+ subgraph ApplicationLayer["Application Layer / FastAPI Backend & Control"]
+        fastapi["FastAPI Backend / Request Routing & Control Flow"]
+        initNode["Init Node / Query Normalization & Context Extraction"]
+        orchestrator["Orchestrator Agent / Result Aggregation & Ranking"]
+  end
+ subgraph ReasoningLayer["Reasoning Layer / LangGraph Agentic Pipeline"]
+        price["Price Agent / 시세·적정가 분석"]
+        safety["Safety Agent / 사기·위험도 분석"]
+  end
+ subgraph External["External Systems"]
+        db["Database / Product & History"]
+        llm["LLM API / OpenAI"]
+  end
+    user --> reactUI
+    reactUI -- JSON Request --> fastapi
+    fastapi --> initNode & reactUI
+    initNode --> price & safety
+    price -- 상품·거래 정보 조회 --> db
+    safety -- 판매자·리스크 정보 조회 --> db
+    price -- LLM 기반 가격 추론 --> llm
+    safety -- LLM 기반 위험도 추론 --> llm
+    price --> orchestrator
+    safety --> orchestrator
+    orchestrator -- 최종 추천 응답 --> fastapi
