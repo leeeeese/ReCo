@@ -127,7 +127,6 @@ class HistoryRequest(BaseModel):
     """히스토리 저장 요청"""
     user_input: UserInput
     search_query: str
-    persona_type: str
     results: List[RecommendationResult]
 
 
@@ -136,7 +135,6 @@ class HistoryResponse(BaseModel):
     id: int
     user_input: Dict[str, Any]
     search_query: str
-    persona_type: str
     results: List[Dict[str, Any]]
     created_at: datetime
 

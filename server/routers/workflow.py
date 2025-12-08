@@ -241,9 +241,9 @@ async def stream_workflow_progress(
                     # 단계별 메시지 생성
                     messages = {
                         "start": "워크플로우 시작",
-                        "initialized": "페르소나 분류 및 검색 쿼리 생성 완료",
-                        "price_analyzed": "가격 분석 완료",
-                        "safety_analyzed": "안전성 분석 완료",
+                        "initialized": "검색 쿼리 생성 완료",
+                        "price_analyzed": "상품 특성 분석 완료",
+                        "safety_analyzed": "신뢰도 분석 완료",
                         "recommendation_completed": "추천 완료",
                         "error": "오류 발생",
                     }

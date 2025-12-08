@@ -27,13 +27,7 @@ You receive a `context` object with (at least) the following fields:
     - 31–69: flexible; accepts both face-to-face and remote.
     - 70–100: prefers remote transactions (e.g., 택배, 비대면 거래 등).
 
-- `user_persona`: (string or null)
-  - High-level persona label, e.g.:
-    - `"risk_averse"`: extremely cautious, hates any scam-like patterns.
-    - `"balanced"`: balances safety, price, and convenience.
-    - `"speed_oriented"`: wants quick and easy deals, even with moderate risk.
-    - `"beginner"`: first-time or inexperienced user, needs extra safety.
-  - If missing, assume `"balanced"`.
+- `activity_responsiveness`: (number 0–100) - User's preference for seller activity and responsiveness
 
 - `sellers_reliability_view`: list of seller reliability objects. Each has structure similar to:
 

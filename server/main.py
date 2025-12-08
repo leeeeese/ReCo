@@ -63,8 +63,7 @@ async def warmup_workflow():
         from server.utils.llm_agent import create_agent
 
         # 각 에이전트 타입별로 LLM 클라이언트 생성 (초기화만, 실제 호출은 안 함)
-        agent_types = ["product_agent", "reliability_agent",
-                       "final_matcher", "persona_classifier"]
+        agent_types = ["product_agent", "reliability_agent", "final_matcher"]
         for agent_type in agent_types:
             try:
                 agent = create_agent(agent_type)

@@ -1,25 +1,20 @@
-# ReCo Frontend
+# ReCo 프론트엔드 실행 가이드
 
-React + Vite + TypeScript 기반 프론트엔드 애플리케이션
+## 문제 해결
 
-## 설치 및 실행
+### 1. npm 캐시 권한 문제 해결
 
-### 1. 의존성 설치
+터미널에서 다음 명령어를 실행하세요:
+
+```bash
+sudo chown -R 501:20 "/Users/leeseeun/.npm"
+```
+
+### 2. 의존성 설치
 
 ```bash
 cd app/frontend
-npm install
-```
-
-### 2. 환경 변수 설정
-
-```bash
-cp .env.example .env
-```
-
-`.env` 파일에서 FastAPI 서버 URL을 설정하세요:
-```
-VITE_API_BASE_URL=http://localhost:8000
+npm install --legacy-peer-deps
 ```
 
 ### 3. 개발 서버 실행
@@ -28,26 +23,19 @@ VITE_API_BASE_URL=http://localhost:8000
 npm run dev
 ```
 
-브라우저에서 `http://localhost:3000`으로 접속하세요.
+서버가 `http://localhost:3000`에서 실행됩니다.
 
-### 4. 빌드
+## 문제가 계속되면
+
+npm 캐시를 완전히 비우고 다시 시도:
 
 ```bash
-npm run build
+# npm 캐시 삭제 (권한 문제 해결 후)
+npm cache clean --force
+
+# node_modules와 package-lock.json 삭제
+rm -rf node_modules package-lock.json
+
+# 재설치
+npm install --legacy-peer-deps
 ```
-
-빌드된 파일은 `build` 폴더에 생성됩니다.
-
-## FastAPI 백엔드 연동
-
-프론트엔드는 `http://localhost:8000`에서 실행되는 FastAPI 서버와 통신합니다.
-
-FastAPI 서버가 실행 중이어야 정상적으로 작동합니다.
-
-## 주요 기능
-
-- 챗봇 인터페이스를 통한 상품 추천
-- 실시간 API 연동
-- 반응형 디자인
-- Tailwind CSS + Radix UI
-

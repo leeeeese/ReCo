@@ -186,8 +186,7 @@ def match_products_to_sellers(
             product_score = _calculate_product_match_score(
                 product,
                 seller,
-                user_input,
-                persona_classification
+                user_input
             )
             scored_products.append({
                 **product,
@@ -317,13 +316,5 @@ def _calculate_product_match_score(
         price_score = 0.5  # 가격 범위가 없으면 중간 점수
 
     score += 0.2 * price_score
-            if condition in ["새상품", "거의새것"]:
-                score += 0.1
-        elif persona_type == "price_sensitive":
-            # 가격이 낮을수록 보너스
-            if price_min and price_max:
-                price_ratio = (price - price_min) / (price_max -
-                                                     price_min) if price_max > price_min else 0.5
-                score += 0.1 * (1.0 - price_ratio)
 
     return min(score, 1.0)

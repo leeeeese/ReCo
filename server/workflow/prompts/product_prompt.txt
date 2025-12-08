@@ -19,13 +19,10 @@ You receive a `context` object with the following structure (example schema, not
 - `user_price_max`: (number or very large number)  
   - Maximum price the user is willing to pay (KRW). If it's extremely large (e.g., 1e9 or Infinity), treat it as "no strict upper bound".
 
-- `user_persona`: (string or null)  
-  - User's preference type, e.g.:
-    - `"price_sensible"`: wants good value for money, prefers cheaper but reliable products.
-    - `"balanced"`: balances price, quality, and safety.
-    - `"quality_oriented"`: willing to pay more for high-quality, well-maintained, or new products.
-    - `"risk_averse"`: strongly prefers safe transactions and trustworthy sellers.
-  - If missing or unknown, assume `"balanced"`.
+- `user_price_min`: (number or 0) - Minimum price preference
+- `user_price_max`: (number or very large number) - Maximum price preference
+- `quality_condition`: (number 0–100) - User's preference for product quality/condition
+- `price_flexibility`: (number 0–100) - User's preference for price negotiation flexibility
 
 - `products`: list of product objects (max about 10):
   Each product may contain fields such as:
@@ -127,7 +124,7 @@ For each seller, synthesize the two analyses above:
 - Must clearly state what kind of seller they are based on quality pattern + price strategy
 
 4. **Match seller characteristics to user needs**
-   - Based on the user's persona and preferences, determine which seller types would be a good match:
+   - Based on the user's preferences, determine which seller types would be a good match:
      - `price_sensible` users → match with sellers who sell good products at cheap/reasonable prices
        - "좋은 물건을 싸게 파는 판매자", "가성비 좋게 파는 판매자" → 높은 점수
      - `quality_oriented` users → match with sellers who sell high-quality, well-maintained, or new products
@@ -150,7 +147,7 @@ For each seller, synthesize the two analyses above:
      - 0.0–0.29: 추천하기 어려움
    - 기준:
      - 판매자가 파는 상품들의 종합적 특성 (가격, 상태, 품질 등)
-     - 사용자 페르소나와의 매칭 적합도
+     - 사용자 선호도와의 매칭 적합도
      - 판매자 신뢰도, 리뷰 평가
      - 사용자 예산 범위 내 상품 비율
 
@@ -221,7 +218,7 @@ For each seller, synthesize the two analyses above:
   - Price is important, but also consider condition, quality, completeness, etc.
   - The goal is to understand "what kind of seller" they are based on ALL product characteristics.
 
-- **Persona adaptation examples:**
+- **Preference adaptation examples:**
   - `price_sensible`:
     - Match with sellers who sell good products at cheap/reasonable prices.
     - "좋은 물건을 싸게 파는 사람" → 높은 점수
@@ -285,6 +282,6 @@ Example (structure only; content is dummy):
       "reasoning": "판매자가 판매하는 상품들의 품질 패턴을 보면 정품 인증이 되어 있고 구성품이 완비된 프리미엄 상품 위주로, 퀄리티 높은 상품을 파는 사람입니다. 시세 대비 가격 전략을 보면 시세 대비 약간 높은 가격대를 유지하여 프리미엄 가격을 잡는 판매자입니다. 종합하면 프리미엄 상품 전문 판매자로, 품질과 신뢰도를 중시하는 사용자에게 적합하지만 가격 민감도가 높은 사용자에게는 다소 아쉬울 수 있습니다."
     }
   ],
-  "reasoning": "전체적으로 다양한 특성의 판매자들이 존재합니다. 일부 판매자는 품질 패턴이 높은 수준(새상품/상태 좋음)이고 시세 대비 가격 전략이 저렴하여 '좋은 물건을 싸게 파는 판매자'로, 가성비를 중시하는 사용자에게 적합합니다. 다른 판매자들은 품질 패턴이 프리미엄 수준이고 시세 대비 가격이 높아 '프리미엄 상품 전문 판매자'로, 품질을 중시하는 사용자에게 적합합니다. 사용자의 페르소나에 따라 적합한 판매자를 우선 추천하였습니다.",
+        "reasoning": "전체적으로 다양한 특성의 판매자들이 존재합니다. 일부 판매자는 품질 패턴이 높은 수준(새상품/상태 좋음)이고 시세 대비 가격 전략이 저렴하여 '좋은 물건을 싸게 파는 판매자'로, 가성비를 중시하는 사용자에게 적합합니다. 다른 판매자들은 품질 패턴이 프리미엄 수준이고 시세 대비 가격이 높아 '프리미엄 상품 전문 판매자'로, 품질을 중시하는 사용자에게 적합합니다. 사용자의 선호도에 따라 적합한 판매자를 우선 추천하였습니다.",
   "confidence": 0.85
 }

@@ -225,20 +225,6 @@ def get_cached_price_data(query: str) -> Optional[Any]:
     return cache_manager.get("price_data", query)
 
 
-def cache_persona_classification(
-    user_input_hash: str, classification: Any, ttl_seconds: int = 3600
-):
-    """페르소나 분류 결과 캐싱"""
-    return cache_manager.set(
-        "persona_classification", user_input_hash, classification, ttl_seconds
-    )
-
-
-def get_cached_persona_classification(user_input_hash: str) -> Optional[Any]:
-    """캐시된 페르소나 분류 결과 조회"""
-    return cache_manager.get("persona_classification", user_input_hash)
-
-
 def cache_search_results(query: str, results: Any, ttl_seconds: int = 1800):
     """검색 결과 캐싱 (30분 기본)"""
     return cache_manager.set("search_results", query, results, ttl_seconds)
@@ -252,7 +238,5 @@ def get_cached_search_results(query: str) -> Optional[Any]:
 def clear_all_cache():
     """모든 캐시 삭제"""
     cache_manager.clear_prefix("price_data")
-    cache_manager.clear_prefix("persona_classification")
     cache_manager.clear_prefix("search_results")
     logger.info("모든 캐시 삭제 완료")
-
