@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Brain, TrendingUp, MessageSquare, ArrowRight } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import logo from 'figma:asset/be4e933247d398b35fc960ad2df357273b46c0e1.png';
+import logo from './ReCo Logo.png';
 
 type LandingPageProps = {
   onNavigate: (page: 'landing' | 'chat' | 'recommendations' | 'about' | 'dashboard') => void;

@@ -1,7 +1,7 @@
 import { Button } from './ui/button';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import logo from 'figma:asset/be4e933247d398b35fc960ad2df357273b46c0e1.png';
+import logo from './ReCo Logo.png';
 
 type NavigationProps = {
   onNavigate: (page: 'landing' | 'chat' | 'recommendations' | 'about' | 'dashboard') => void;
