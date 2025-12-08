@@ -41,6 +41,8 @@ export interface RecommendationResponse {
   final_item_scores?: RecommendationResult[];
   ranked_products?: RecommendationResult[];
   error_message?: string;
+  execution_time?: number;
+  session_id?: string;
 }
 
 class ApiClient {
@@ -105,6 +107,42 @@ class ApiClient {
       return response.ok;
     } catch (error) {
       return false;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  async chat(message: string): Promise<{ response: string }> {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      10000 // 일반 대화는 10초 타임아웃
+    );
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`대화 API 호출 실패 (status: ${response.status})`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error("요청 시간이 초과되었습니다.");
+      }
+      console.error("대화 API 호출 실패:", error);
+      throw error instanceof Error
+        ? error
+        : new Error("알 수 없는 오류가 발생했습니다.");
     } finally {
       window.clearTimeout(timeoutId);
     }

@@ -286,6 +286,11 @@ def product_agent_node(state: RecommendationState) -> RecommendationState:
             raise ValueError(f"상품 특성 분석 에이전트 데이터 조회 실패: {str(e)}")
 
         # 상품 특성 관점에서 판매자 추천
+        logger.info(
+            "상품 특성 분석 에이전트 LLM 호출 시작",
+            extra={"seller_count": len(sellers_with_products)},
+        )
+
         product_recommendations = agent.recommend_sellers_by_product_characteristics(
             user_input,
             sellers_with_products,
@@ -294,7 +299,10 @@ def product_agent_node(state: RecommendationState) -> RecommendationState:
         # 결과를 상태에 저장
         logger.info(
             "상품 특성 분석 에이전트 분석 완료",
-            extra={"recommended_sellers": len(product_recommendations)},
+            extra={
+                "recommended_sellers": len(product_recommendations),
+                "has_recommendations": len(product_recommendations) > 0,
+            },
         )
 
         return {

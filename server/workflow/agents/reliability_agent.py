@@ -226,6 +226,11 @@ def reliability_agent_node(state: RecommendationState) -> RecommendationState:
             raise ValueError(f"신뢰도 분석 에이전트 데이터 조회 실패: {str(e)}")
 
         # 신뢰도 관점에서 판매자 추천
+        logger.info(
+            "신뢰도 분석 에이전트 LLM 호출 시작",
+            extra={"seller_count": len(sellers_with_products)},
+        )
+
         reliability_recommendations = agent.recommend_sellers_by_reliability(
             user_input,
             sellers_with_products,
@@ -234,7 +239,10 @@ def reliability_agent_node(state: RecommendationState) -> RecommendationState:
         # 결과를 상태에 저장 (변경하는 필드만 반환 - user_input은 변경하지 않으므로 제외)
         logger.info(
             "신뢰도 분석 에이전트 분석 완료",
-            extra={"recommended_sellers": len(reliability_recommendations)},
+            extra={
+                "recommended_sellers": len(reliability_recommendations),
+                "has_recommendations": len(reliability_recommendations) > 0,
+            },
         )
 
         # completed_steps는 add reducer를 사용하므로 리스트로 반환

@@ -81,19 +81,39 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
 
         loop = asyncio.get_running_loop()
 
+        logger.info(
+            "워크플로우 실행 시작",
+            extra={
+                "search_query": user_input.search_query,
+                "timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS,
+            }
+        )
+
         try:
             final_state = await asyncio.wait_for(
                 loop.run_in_executor(None, workflow_app.invoke, initial_state),
                 timeout=config.WORKFLOW_TIMEOUT_SECONDS,
             )
+
+            logger.info(
+                "워크플로우 실행 완료",
+                extra={
+                    "execution_time": final_state.get("execution_time"),
+                    "completed_steps": final_state.get("completed_steps", []),
+                    "has_error": bool(final_state.get("error_message")),
+                }
+            )
         except asyncio.TimeoutError:
             logger.error(
                 "워크플로우 실행 타임아웃",
-                extra={"timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS},
+                extra={
+                    "timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS,
+                    "search_query": user_input.search_query,
+                },
             )
             return {
                 "status": "error",
-                "error_message": "추천 시스템 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.",
+                "error_message": f"추천 시스템 응답이 지연되고 있습니다. (타임아웃: {config.WORKFLOW_TIMEOUT_SECONDS}초) 잠시 후 다시 시도해주세요.",
             }
 
         # 실행 시간 계산
@@ -115,13 +135,65 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             )
             return response
 
+        # final_item_scores 생성 (final_recommendations에서 추출)
+        final_recommendations = final_state.get("final_recommendations", {})
+        recommended_sellers = final_recommendations.get(
+            "recommended_sellers", [])
+
+        # final_item_scores 형식으로 변환
+        final_item_scores = []
+        for seller in recommended_sellers:
+            products = seller.get("products", [])
+            if products:
+                for product in products:
+                    final_item_scores.append({
+                        "product_id": product.get("product_id"),
+                        "seller_id": seller.get("seller_id"),
+                        "title": product.get("title", ""),
+                        "price": product.get("price", 0),
+                        "final_score": seller.get("final_score", 0.5),
+                        "ranking_factors": {
+                            "reasoning": seller.get("final_reasoning", ""),
+                            "product_score": seller.get("product_score", 0.5),
+                            "reliability_score": seller.get("reliability_score", 0.5),
+                        },
+                        "final_reasoning": seller.get("final_reasoning", ""),
+                        "seller_name": seller.get("seller_name", ""),
+                        "category": product.get("category", ""),
+                        "condition": product.get("condition", ""),
+                        "location": product.get("location", ""),
+                    })
+            else:
+                # 상품 정보가 없으면 판매자 정보만으로 생성
+                final_item_scores.append({
+                    "product_id": seller.get("seller_id", 0),
+                    "seller_id": seller.get("seller_id", 0),
+                    "title": seller.get("seller_name", ""),
+                    "price": 0,
+                    "final_score": seller.get("final_score", 0.5),
+                    "ranking_factors": {
+                        "reasoning": seller.get("final_reasoning", ""),
+                        "product_score": seller.get("product_score", 0.5),
+                        "reliability_score": seller.get("reliability_score", 0.5),
+                    },
+                    "final_reasoning": seller.get("final_reasoning", ""),
+                    "seller_name": seller.get("seller_name", ""),
+                    "category": "",
+                    "condition": "",
+                    "location": "",
+                })
+
+        # 점수 기준 정렬
+        final_item_scores.sort(key=lambda x: x.get(
+            "final_score", 0), reverse=True)
+
         # 성공 응답 구성
         response.update({
-            "final_item_scores": final_state.get("final_item_scores", []),
+            "final_item_scores": final_item_scores,
             # 호환성을 위해
-            "ranked_products": final_state.get("final_item_scores", []),
-            "final_seller_recommendations": final_state.get("final_seller_recommendations", []),
-            "ranking_explanation": final_state.get("ranking_explanation", ""),
+            "ranked_products": final_item_scores,
+            "final_seller_recommendations": recommended_sellers,
+            "ranking_explanation": final_recommendations.get("reasoning", ""),
             "current_step": final_state.get("current_step", "completed"),
             "completed_steps": final_state.get("completed_steps", []),
             "execution_time": final_state.get("execution_time"),
@@ -337,6 +409,42 @@ async def recommend_products_stream(user_input: UserInput):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/chat")
+async def chat(message: Dict[str, str]) -> Dict[str, str]:
+    """
+    일반 대화 API
+    """
+    user_message = message.get("message", "").strip().lower()
+
+    # 간단한 응답 로직
+    responses = {
+        "안녕": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
+        "안녕하세요": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
+        "안녕하셔": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
+        "하이": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
+        "hi": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
+        "hello": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
+        "고마워": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
+        "고마워요": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
+        "감사": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
+        "감사합니다": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
+        "고맙습니다": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
+        "도와줘": "네, 도와드리겠습니다! 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다.",
+        "도와주세요": "네, 도와드리겠습니다! 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다.",
+        "help": "네, 도와드리겠습니다! 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다.",
+    }
+
+    # 정확한 매칭 시도
+    for key, response in responses.items():
+        if key in user_message:
+            return {"response": response}
+
+    # 기본 응답
+    return {
+        "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다."
+    }
 
 
 @router.get("/health")

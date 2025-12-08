@@ -39,6 +39,50 @@ class OrchestratorAgent:
         Returns:
             최종 추천 결과
         """
+        # 에러 체크
+        product_error = product_agent_results.get("error")
+        reliability_error = reliability_agent_results.get("error")
+
+        product_sellers = product_agent_results.get("recommended_sellers", [])
+        reliability_sellers = reliability_agent_results.get(
+            "recommended_sellers", [])
+
+        # 두 에이전트 모두 실패한 경우
+        if (product_error and reliability_error) or (not product_sellers and not reliability_sellers):
+            logger.warning(
+                "두 에이전트 모두 실패 또는 빈 결과",
+                extra={
+                    "product_error": product_error,
+                    "reliability_error": reliability_error,
+                    "product_count": len(product_sellers),
+                    "reliability_count": len(reliability_sellers),
+                }
+            )
+            return {
+                "recommended_sellers": [],
+                "reasoning": f"상품 분석 오류: {product_error or '없음'}, 신뢰도 분석 오류: {reliability_error or '없음'}",
+            }
+
+        # 하나의 에이전트만 성공한 경우
+        if not product_sellers or not reliability_sellers:
+            logger.warning(
+                "하나의 에이전트만 성공",
+                extra={
+                    "product_count": len(product_sellers),
+                    "reliability_count": len(reliability_sellers),
+                }
+            )
+            # 성공한 에이전트의 결과만 사용
+            if product_sellers and not reliability_sellers:
+                return {
+                    "recommended_sellers": product_sellers[:10],
+                    "reasoning": "신뢰도 분석 실패로 상품 특성만 고려하여 추천합니다.",
+                }
+            elif reliability_sellers and not product_sellers:
+                return {
+                    "recommended_sellers": reliability_sellers[:10],
+                    "reasoning": "상품 특성 분석 실패로 신뢰도만 고려하여 추천합니다.",
+                }
 
         # -------------------------------------------------------------
         # 🔥 1) LLM에게 넘길 context 구성
@@ -74,12 +118,29 @@ class OrchestratorAgent:
             format="json",
         )
 
+        # LLM 호출 실패 체크
+        if decision.get("error") or decision.get("fallback"):
+            logger.warning(
+                "LLM 호출 실패, 기본 결합 로직 사용",
+                extra={"error": decision.get("error")}
+            )
+            # 기본 결합 로직으로 fallback
+            return self._fallback_combine(product_sellers, reliability_sellers)
+
         # -------------------------------------------------------------
         # 🔥 3) LLM 결과 파싱 및 상품 매칭
         # -------------------------------------------------------------
         final_recommendations = decision.get("final_recommendations", {})
+        if not final_recommendations:
+            logger.warning("LLM 결과에 final_recommendations 없음, 기본 결합 로직 사용")
+            return self._fallback_combine(product_sellers, reliability_sellers)
+
         seller_ids = final_recommendations.get("seller_ids", [])
         scores = final_recommendations.get("scores", {})
+
+        if not seller_ids:
+            logger.warning("LLM 결과에 seller_ids 없음, 기본 결합 로직 사용")
+            return self._fallback_combine(product_sellers, reliability_sellers)
 
         # 판매자 ID를 정수로 변환
         recommended_seller_ids = []
@@ -145,6 +206,63 @@ class OrchestratorAgent:
             "reasoning": decision.get("reasoning", "최종 추천 완료"),
         }
 
+    def _fallback_combine(
+        self,
+        product_sellers: List[Dict[str, Any]],
+        reliability_sellers: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """기본 결합 로직 (LLM 실패 시 사용)"""
+        # 판매자 ID 수집
+        seller_ids = set()
+        for seller in product_sellers:
+            seller_ids.add(seller.get("seller_id"))
+        for seller in reliability_sellers:
+            seller_ids.add(seller.get("seller_id"))
+
+        # 단순 결합
+        seller_dict = {}
+        for seller in product_sellers:
+            seller_id = seller.get("seller_id")
+            seller_dict[seller_id] = {
+                **seller,
+                "reliability_score": seller.get("reliability_score", 0.5),
+            }
+        for seller in reliability_sellers:
+            seller_id = seller.get("seller_id")
+            if seller_id in seller_dict:
+                seller_dict[seller_id]["reliability_score"] = seller.get(
+                    "reliability_score", 0.5)
+            else:
+                seller_dict[seller_id] = {
+                    **seller,
+                    "product_score": seller.get("product_score", 0.5),
+                }
+
+        # 최종 점수 계산 (기본 가중치: 50:50)
+        fallback_sellers = []
+        for seller_id, seller_data in seller_dict.items():
+            product_score = seller_data.get("product_score", 0.5)
+            reliability_score = seller_data.get("reliability_score", 0.5)
+            final_score = product_score * 0.5 + reliability_score * 0.5
+
+            fallback_sellers.append({
+                "seller_id": seller_id,
+                "seller_name": seller_data.get("seller_name", ""),
+                "products": seller_data.get("products", []),
+                "final_score": final_score,
+                "product_score": product_score,
+                "reliability_score": reliability_score,
+                "final_reasoning": "LLM 오류로 인해 기본 결합 로직을 사용했습니다.",
+                "match_explanation": "균형 잡힌 선택을 원하는 사용자에게 적합합니다.",
+            })
+
+        fallback_sellers.sort(key=lambda x: x["final_score"], reverse=True)
+
+        return {
+            "recommended_sellers": fallback_sellers[:10],
+            "reasoning": "LLM 오류로 인해 기본 결합 로직을 사용했습니다.",
+        }
+
 
 def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
     """최종 통합 및 랭킹 에이전트 노드"""
@@ -157,6 +275,14 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
         # 최종 통합 에이전트 실행
         agent = OrchestratorAgent()
 
+        logger.info(
+            "최종 통합 에이전트 LLM 호출 시작",
+            extra={
+                "product_sellers": len(product_agent_results.get("recommended_sellers", [])),
+                "reliability_sellers": len(reliability_agent_results.get("recommended_sellers", [])),
+            },
+        )
+
         # 최종 추천 생성
         final_results = agent.finalize_recommendations(
             user_input,
@@ -166,8 +292,10 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
 
         logger.info(
             "최종 통합 에이전트 분석 완료",
-            extra={"recommended_sellers": len(
-                final_results.get("recommended_sellers", []))},
+            extra={
+                "recommended_sellers": len(final_results.get("recommended_sellers", [])),
+                "has_recommendations": len(final_results.get("recommended_sellers", [])) > 0,
+            },
         )
 
         return {
@@ -244,8 +372,9 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             return {
                 "final_recommendations": {
                     "recommended_sellers": [],
-                    "reasoning": f"최종 통합 에이전트 오류: {str(e)}",
+                    "reasoning": f"최종 통합 에이전트 오류: {str(e)}, Fallback 오류: {str(fallback_error)}",
                 },
+                "error_message": f"최종 통합 에이전트 오류: {str(e)}",
                 "current_step": "error",
                 "completed_steps": ["orchestration"],
             }

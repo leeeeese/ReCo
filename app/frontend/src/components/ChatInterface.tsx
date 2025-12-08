@@ -89,6 +89,65 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages]);
 
+  // 일반 대화인지 판단하는 함수
+  const isGeneralChat = (text: string): boolean => {
+    const lowerText = text.toLowerCase().trim();
+    const greetings = [
+      "안녕",
+      "안녕하세요",
+      "안녕하셔",
+      "하이",
+      "hi",
+      "hello",
+      "헬로",
+      "반가워",
+      "반갑습니다",
+      "좋은 아침",
+      "좋은 저녁",
+      "좋은 오후",
+      "고마워",
+      "고마워요",
+      "감사",
+      "감사합니다",
+      "고맙습니다",
+      "뭐해",
+      "뭐하세요",
+      "뭐하니",
+      "뭐하냐",
+      "누구야",
+      "누구세요",
+      "누구니",
+      "도와줘",
+      "도와주세요",
+      "도움",
+      "help",
+    ];
+
+    // 인사말이거나 짧은 문장(10자 이하)이면 일반 대화로 판단
+    if (greetings.some((greeting) => lowerText.includes(greeting))) {
+      return true;
+    }
+
+    // 질문 패턴 체크
+    const questionPatterns = [
+      /^[가-힣\s]{0,10}[?？]/,
+      /^[가-힣\s]{0,10}인가요/,
+      /^[가-힣\s]{0,10}인가\?/,
+      /^[가-힣\s]{0,10}인지/,
+    ];
+
+    if (questionPatterns.some((pattern) => pattern.test(text))) {
+      return true;
+    }
+
+    // 너무 짧은 문장 (3자 이하)은 일반 대화로 판단
+    if (text.length <= 3) {
+      return true;
+    }
+
+    return false;
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim()) return;
 
@@ -100,13 +159,59 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
 
     setMessages((prev) => [...prev, userMessage]);
 
-    // Add to recent searches if not already there
-    if (!recentSearches.includes(inputValue)) {
-      setRecentSearches((prev) => [inputValue, ...prev.slice(0, 4)]);
-    }
-
     const query = inputValue;
     setInputValue("");
+
+    // 일반 대화인지 확인
+    if (isGeneralChat(query)) {
+      // 로딩 메시지 추가
+      const loadingMessageId = (Date.now() + 1).toString();
+      const loadingMessage: Message = {
+        id: loadingMessageId,
+        type: "bot",
+        text: "응답 중...",
+      };
+      setMessages((prev) => [...prev, loadingMessage]);
+
+      try {
+        // 일반 대화 API 호출
+        const response = await apiClient.chat(query);
+
+        // 로딩 메시지 제거
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== loadingMessageId)
+        );
+
+        const botMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          type: "bot",
+          text: response.response || "안녕하세요! 무엇을 도와드릴까요?",
+        };
+        setMessages((prev) => [...prev, botMessage]);
+      } catch (error) {
+        // 로딩 메시지 제거
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== loadingMessageId)
+        );
+
+        console.error("대화 API 호출 오류:", error);
+        const errorMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          type: "bot",
+          text:
+            error instanceof Error
+              ? error.message
+              : "대화 처리 중 오류가 발생했습니다.",
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+      return;
+    }
+
+    // Add to recent searches if not already there
+    if (!recentSearches.includes(query)) {
+      setRecentSearches((prev) => [query, ...prev.slice(0, 4)]);
+    }
 
     // 로딩 메시지 추가
     const loadingMessageId = (Date.now() + 1).toString();
@@ -118,7 +223,7 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
     setMessages((prev) => [...prev, loadingMessage]);
 
     try {
-      // API 호출
+      // 상품 추천 API 호출
       const response = await apiClient.recommendProducts({
         search_query: query,
         price_min: minPrice > 0 ? minPrice : null,
@@ -155,6 +260,12 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
         return;
       }
 
+      // 실행 시간 로깅 (개발 환경)
+      const executionTime = response.execution_time;
+      if (executionTime != null && typeof executionTime === "number") {
+        console.log(`워크플로우 실행 시간: ${executionTime.toFixed(2)}초`);
+      }
+
       const formattedProducts = products.map((product: any) => ({
         image:
           "https://images.unsplash.com/photo-1557817683-5cfe3620b05c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwdGVjaG5vbG9neXxlbnwxfHx8fDE3NjA5NTUxMjZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
@@ -181,12 +292,33 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
       // 로딩 메시지 제거
       setMessages((prev) => prev.filter((msg) => msg.id !== loadingMessageId));
 
+      // 에러 로깅
+      console.error("API 호출 오류:", error);
+
+      let errorText = "알 수 없는 오류가 발생했습니다.";
+      if (error instanceof Error) {
+        errorText = error.message;
+        // 네트워크 오류인 경우
+        if (
+          error.message.includes("Failed to fetch") ||
+          error.message.includes("network")
+        ) {
+          errorText =
+            "백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.";
+        }
+        // 타임아웃 오류인 경우
+        if (
+          error.message.includes("시간이 초과") ||
+          error.message.includes("timeout")
+        ) {
+          errorText = "요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+        }
+      }
+
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         type: "bot",
-        text: `오류가 발생했습니다: ${
-          error instanceof Error ? error.message : "알 수 없는 오류"
-        }`,
+        text: `오류가 발생했습니다: ${errorText}`,
       };
       setMessages((prev) => [...prev, errorMessage]);
     }
