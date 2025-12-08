@@ -414,37 +414,60 @@ async def recommend_products_stream(user_input: UserInput):
 @router.post("/chat")
 async def chat(message: Dict[str, str]) -> Dict[str, str]:
     """
-    일반 대화 API
+    일반 대화 API (LLM 기반)
     """
-    user_message = message.get("message", "").strip().lower()
+    user_message = message.get("message", "").strip()
 
-    # 간단한 응답 로직
-    responses = {
-        "안녕": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
-        "안녕하세요": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
-        "안녕하셔": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
-        "하이": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
-        "hi": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
-        "hello": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?",
-        "고마워": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
-        "고마워요": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
-        "감사": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
-        "감사합니다": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
-        "고맙습니다": "천만에요! 다른 도움이 필요하시면 언제든 말씀해주세요.",
-        "도와줘": "네, 도와드리겠습니다! 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다.",
-        "도와주세요": "네, 도와드리겠습니다! 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다.",
-        "help": "네, 도와드리겠습니다! 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다.",
-    }
+    if not user_message:
+        return {
+            "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?"
+        }
 
-    # 정확한 매칭 시도
-    for key, response in responses.items():
-        if key in user_message:
-            return {"response": response}
+    try:
+        # LLM을 사용한 자연스러운 대화
+        from server.utils.llm_agent import LLMAgent
 
-    # 기본 응답
-    return {
-        "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다."
-    }
+        chat_agent = LLMAgent(
+            system_prompt="""당신은 중고거래 상품 추천 서비스 ReCo의 친절한 AI 어시스턴트입니다.
+사용자와 자연스럽고 친근하게 대화하며, 중고거래 상품 추천 서비스를 소개하고 도와드립니다.
+- 인사말에는 친근하게 응답하세요
+- 감사 표현에는 겸손하게 응답하세요
+- 질문에는 간단명료하게 답변하세요
+- 상품 추천이 필요하면 상품명을 입력하라고 안내하세요
+- 항상 한국어로 응답하세요
+- 응답은 1-2문장으로 간결하게 작성하세요"""
+        )
+
+        # LLM 호출 (텍스트 형식)
+        result = chat_agent.decide(
+            context={"user_message": user_message},
+            decision_task=f"사용자가 '{user_message}'라고 말했습니다. 자연스럽고 친근하게 응답해주세요.",
+            format="text"
+        )
+
+        if result.get("error") or result.get("fallback"):
+            # LLM 호출 실패 시 기본 응답
+            logger.warning("일반 대화 LLM 호출 실패, 기본 응답 사용", extra={
+                           "error": result.get("error")})
+            return {
+                "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다."
+            }
+
+        # LLM 응답 추출
+        llm_response = result.get("result", "").strip()
+        if llm_response:
+            return {"response": llm_response}
+        else:
+            return {
+                "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?"
+            }
+
+    except Exception as e:
+        logger.exception("일반 대화 처리 중 오류 발생")
+        # 에러 발생 시 기본 응답
+        return {
+            "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다."
+        }
 
 
 @router.get("/health")

@@ -45,7 +45,8 @@ class LLMAgent:
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
 
-        user_prompt = self._build_prompt(context, decision_task, options)
+        user_prompt = self._build_prompt(
+            context, decision_task, options, format)
         messages.append({"role": "user", "content": user_prompt})
 
         last_error: Optional[Exception] = None
@@ -64,7 +65,12 @@ class LLMAgent:
                 result = response.choices[0].message.content
                 if format == "json":
                     import json
-                    return json.loads(result)
+                    try:
+                        return json.loads(result)
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패 시 텍스트로 반환
+                        logger.warning(f"JSON 파싱 실패, 텍스트로 반환: {result[:100]}")
+                        return {"result": result, "error": "JSON 파싱 실패"}
                 return {"result": result}
 
             except Exception as e:
@@ -76,8 +82,13 @@ class LLMAgent:
 
         return {"error": str(last_error) if last_error else "LLM 호출 실패", "fallback": True}
 
-    def _build_prompt(self, context: Dict[str, Any], task: str, options: Optional[List[Any]]) -> str:
+    def _build_prompt(self, context: Dict[str, Any], task: str, options: Optional[List[Any]], format: str = "json") -> str:
         """프롬프트 구성"""
+        # format이 "text"인 경우 간단한 프롬프트
+        if format == "text":
+            return task
+
+        # JSON 형식인 경우 기존 로직 사용
         prompt = f"다음 정보를 바탕으로 {task}를 수행해주세요.\n\n"
         prompt += "## 컨텍스트 정보:\n"
         for key, value in context.items():

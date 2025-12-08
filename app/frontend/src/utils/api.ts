@@ -116,7 +116,7 @@ class ApiClient {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(
       () => controller.abort(),
-      10000 // 일반 대화는 10초 타임아웃
+      5000 // 일반 대화는 5초 타임아웃 (빠른 응답이어야 함)
     );
 
     try {
@@ -137,9 +137,22 @@ class ApiClient {
       return data;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        throw new Error("요청 시간이 초과되었습니다.");
+        throw new Error(
+          "요청 시간이 초과되었습니다. 백엔드 서버가 실행 중인지 확인해주세요."
+        );
       }
       console.error("대화 API 호출 실패:", error);
+
+      // 네트워크 오류인 경우 더 명확한 메시지
+      if (
+        error instanceof TypeError &&
+        error.message.includes("Failed to fetch")
+      ) {
+        throw new Error(
+          "백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요."
+        );
+      }
+
       throw error instanceof Error
         ? error
         : new Error("알 수 없는 오류가 발생했습니다.");

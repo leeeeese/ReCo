@@ -195,13 +195,29 @@ export default function ChatInterface({ onNavigate }: ChatInterfaceProps) {
         );
 
         console.error("대화 API 호출 오류:", error);
+
+        let errorText = "대화 처리 중 오류가 발생했습니다.";
+        if (error instanceof Error) {
+          errorText = error.message;
+          // 네트워크 오류인 경우
+          if (
+            error.message.includes("Failed to fetch") ||
+            error.message.includes("연결할 수 없습니다")
+          ) {
+            errorText =
+              "백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.";
+          }
+          // 타임아웃 오류인 경우
+          if (error.message.includes("시간이 초과")) {
+            errorText =
+              "요청 시간이 초과되었습니다. 백엔드 서버가 실행 중인지 확인해주세요.";
+          }
+        }
+
         const errorMessage: Message = {
           id: (Date.now() + 2).toString(),
           type: "bot",
-          text:
-            error instanceof Error
-              ? error.message
-              : "대화 처리 중 오류가 발생했습니다.",
+          text: errorText,
         };
         setMessages((prev) => [...prev, errorMessage]);
       }
