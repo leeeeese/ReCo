@@ -18,7 +18,8 @@ class OrchestratorAgent:
     """최종 통합 및 랭킹 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        self.llm_agent = create_agent("final_matcher")
+        # 오케스트레이터는 gpt-5-mini 사용 (더 강력한 추론)
+        self.llm_agent = create_agent("final_matcher", model="gpt-5-mini")
         self.orchestrator_prompt = load_prompt(
             "orchestrator_recommendation_prompt")
 
@@ -298,8 +299,10 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             },
         )
 
+        # State 필드에 맞게 반환 (final_seller_recommendations, final_item_scores, ranking_explanation)
         return {
-            "final_recommendations": final_results,
+            "final_seller_recommendations": final_results.get("recommended_sellers", []),
+            "ranking_explanation": final_results.get("reasoning", ""),
             "current_step": "completed",
             "completed_steps": ["orchestration"],
         }
@@ -360,20 +363,16 @@ def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
             fallback_sellers.sort(key=lambda x: x["final_score"], reverse=True)
 
             return {
-                "final_recommendations": {
-                    "recommended_sellers": fallback_sellers,
-                    "reasoning": "LLM 오류로 인해 기본 결합 로직을 사용했습니다.",
-                },
+                "final_seller_recommendations": fallback_sellers,
+                "ranking_explanation": "LLM 오류로 인해 기본 결합 로직을 사용했습니다.",
                 "current_step": "completed",
                 "completed_steps": ["orchestration"],
             }
         except Exception as fallback_error:
             logger.exception("Fallback 로직도 실패")
             return {
-                "final_recommendations": {
-                    "recommended_sellers": [],
-                    "reasoning": f"최종 통합 에이전트 오류: {str(e)}, Fallback 오류: {str(fallback_error)}",
-                },
+                "final_seller_recommendations": [],
+                "ranking_explanation": f"최종 통합 에이전트 오류: {str(e)}, Fallback 오류: {str(fallback_error)}",
                 "error_message": f"최종 통합 에이전트 오류: {str(e)}",
                 "current_step": "error",
                 "completed_steps": ["orchestration"],

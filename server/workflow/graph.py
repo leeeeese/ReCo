@@ -24,7 +24,7 @@ def recommendation_workflow() -> StateGraph:
     workflow = StateGraph(RecommendationState)
 
     # 초기화 노드: 검색 쿼리 생성
-    def init_node(state: RecommendationState) -> RecommendationState:
+    def init_node(state: RecommendationState) -> dict:
         """초기화: 검색 쿼리 생성"""
         # user_input 복사하여 수정 (LangGraph LastValue 채널 중복 write 방지)
         user_input = dict(state["user_input"])
@@ -32,10 +32,9 @@ def recommendation_workflow() -> StateGraph:
         # 검색 쿼리 생성
         search_query = generate_search_query(user_input)
 
-        # 새로운 state 반환 (LangGraph는 immutable state를 요구)
+        # 업데이트할 필드만 반환 (**state 제거)
         # completed_steps는 add reducer를 사용하므로 리스트로 반환
         return {
-            **state,
             "user_input": user_input,
             "search_query": search_query,
             "current_step": "initialized",

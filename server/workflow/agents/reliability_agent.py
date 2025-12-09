@@ -22,7 +22,8 @@ class ReliabilityAgent:
     """신뢰도 분석 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        self.llm_agent = create_agent("reliability_agent")
+        # 서브 에이전트는 gpt-4o-mini 사용 (빠른 응답)
+        self.llm_agent = create_agent("reliability_agent", model="gpt-4o-mini")
         self.reliability_prompt = load_prompt("reliability_prompt")
 
     def recommend_sellers_by_reliability(

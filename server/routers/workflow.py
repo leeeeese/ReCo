@@ -135,10 +135,9 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             )
             return response
 
-        # final_item_scores 생성 (final_recommendations에서 추출)
-        final_recommendations = final_state.get("final_recommendations", {})
-        recommended_sellers = final_recommendations.get(
-            "recommended_sellers", [])
+        # final_item_scores 생성 (final_seller_recommendations에서 추출)
+        recommended_sellers = final_state.get(
+            "final_seller_recommendations", [])
 
         # final_item_scores 형식으로 변환
         final_item_scores = []
@@ -193,7 +192,7 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             # 호환성을 위해
             "ranked_products": final_item_scores,
             "final_seller_recommendations": recommended_sellers,
-            "ranking_explanation": final_recommendations.get("reasoning", ""),
+            "ranking_explanation": final_state.get("ranking_explanation", ""),
             "current_step": final_state.get("current_step", "completed"),
             "completed_steps": final_state.get("completed_steps", []),
             "execution_time": final_state.get("execution_time"),

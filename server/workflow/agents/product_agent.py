@@ -23,7 +23,8 @@ class ProductAgent:
     """상품 특성 분석 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        self.llm_agent = create_agent("product_agent")
+        # 서브 에이전트는 gpt-4o-mini 사용 (빠른 응답)
+        self.llm_agent = create_agent("product_agent", model="gpt-4o-mini")
         self.product_prompt = load_prompt("product_prompt")
 
     def recommend_sellers_by_product_characteristics(

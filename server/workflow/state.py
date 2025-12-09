@@ -25,7 +25,8 @@ class RecommendationState(TypedDict):
 
     # 워크플로우 상태
     current_step: str
-    completed_steps: Annotated[List[str], add]  # LangGraph add reducer 사용
+    # LangGraph add reducer 사용 (리스트 병합)
+    completed_steps: Annotated[List[str], add]
     error_message: Optional[str]
     execution_start_time: Optional[float]
     execution_time: Optional[float]

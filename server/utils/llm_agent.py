@@ -16,10 +16,10 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 class LLMAgent:
     """LLM 기반 의사결정 에이전트"""
 
-    def __init__(self, system_prompt: str = None):
+    def __init__(self, system_prompt: str = None, model: str = None):
         self.client = OpenAI(
             api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-        self.model = OPENAI_MODEL
+        self.model = model or OPENAI_MODEL  # 커스텀 모델 또는 기본 모델 사용
         self.system_prompt = system_prompt
         self.max_retries = config.LLM_MAX_RETRIES
         self.request_timeout = config.LLM_TIMEOUT_SECONDS
@@ -51,14 +51,17 @@ class LLMAgent:
 
         last_error: Optional[Exception] = None
 
-        for attempt in range(self.max_retries):
+        # max_retries=0이면 1번만 시도, max_retries=1이면 최대 2번 시도
+        max_attempts = self.max_retries + 1
+
+        for attempt in range(max_attempts):
             try:
+                # gpt-5-mini는 temperature=1만 지원하므로 파라미터 제거 (기본값 사용)
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     response_format={
                         "type": "json_object"} if format == "json" else None,
-                    temperature=0.7,  # 창의적 판단을 위한 적절한 온도
                     timeout=self.request_timeout,
                 )
 
@@ -75,7 +78,7 @@ class LLMAgent:
 
             except Exception as e:
                 last_error = e
-                if attempt < self.max_retries - 1:
+                if attempt < max_attempts - 1:  # 마지막 시도가 아니면 재시도
                     sleep_for = 2 ** attempt
                     time.sleep(sleep_for)
                     continue
@@ -126,32 +129,31 @@ class LLMAgent:
         return self.decide(context, f"다음 서브에이전트들의 결과를 종합하여 {combination_task}")
 
 
-def create_agent(agent_type: str, system_prompt: str = None) -> LLMAgent:
+def create_agent(agent_type: str, system_prompt: str = None, model: str = None) -> LLMAgent:
     """에이전트 타입별로 생성"""
-    default_prompts = {
-        """You are the primary ReAct agent that transforms marketplace signals into a structured seller evaluation profile.
+    # 기본 프롬프트 (모든 에이전트에 공통 적용)
+    default_prompt = """You are the primary ReAct agent that transforms marketplace signals into a structured seller evaluation profile.
 
-        Core Objective:
-        Integrate data from product features, pricing patterns, seller activity logs, reliability metrics, and risk indicators to help the orchestrator generate final recommendations.
+    Core Objective:
+    Integrate data from product features, pricing patterns, seller activity logs, reliability metrics, and risk indicators to help the orchestrator generate final recommendations.
 
-        What you must do:
-        1. Analyze user intent and constraints.
-        2. Perform ReAct reasoning cycles to identify missing information.
-        3. Call tools to fetch listing data, compute price risk, retrieve seller behavior, or validate transaction safety.
-        4. Convert raw tool outputs into normalized scoring factors:
-        - product_quality_score
-        - price_fairness_score
-        - reliability_score
-        - safety_risk_score
-        5. Output results in a consistent machine-readable format for the orchestrator.
-        6. Speak Korean to the user, but keep internal reasoning and JSON structures in English.
+    What you must do:
+    1. Analyze user intent and constraints.
+    2. Perform ReAct reasoning cycles to identify missing information.
+    3. Call tools to fetch listing data, compute price risk, retrieve seller behavior, or validate transaction safety.
+    4. Convert raw tool outputs into normalized scoring factors:
+    - product_quality_score
+    - price_fairness_score
+    - reliability_score
+    - safety_risk_score
+    5. Output results in a consistent machine-readable format for the orchestrator.
+    6. Speak Korean to the user, but keep internal reasoning and JSON structures in English.
 
-        Principles:
-        - No hallucination.
-        - No guessing when missing data can be retrieved.
-        - Always justify rankings through explicit evidence.
-        """
-    }
+    Principles:
+    - No hallucination.
+    - No guessing when missing data can be retrieved.
+    - Always justify rankings through explicit evidence.
+    """
 
-    prompt = system_prompt or default_prompts.get(agent_type, "")
-    return LLMAgent(system_prompt=prompt)
+    prompt = system_prompt or default_prompt
+    return LLMAgent(system_prompt=prompt, model=model)

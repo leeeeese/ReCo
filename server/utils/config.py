@@ -103,14 +103,15 @@ def load_and_validate_config() -> Dict[str, Any]:
 
         LLM_TIMEOUT_SECONDS = validate_type(
             "LLM_TIMEOUT_SECONDS", os.getenv(
-                "LLM_TIMEOUT_SECONDS"), float, 60.0
+                "LLM_TIMEOUT_SECONDS"), float, 180.0  # 기본값 180초
         )
         LLM_TIMEOUT_SECONDS = validate_range(
             "LLM_TIMEOUT_SECONDS", LLM_TIMEOUT_SECONDS, min_value=1.0, max_value=300.0
         )
 
         LLM_MAX_RETRIES = validate_type(
-            "LLM_MAX_RETRIES", os.getenv("LLM_MAX_RETRIES"), int, 2
+            "LLM_MAX_RETRIES", os.getenv(
+                "LLM_MAX_RETRIES"), int, 0  # 기본값 0 (리트라이 없음)
         )
         LLM_MAX_RETRIES = validate_range(
             "LLM_MAX_RETRIES", LLM_MAX_RETRIES, min_value=0, max_value=10
@@ -165,7 +166,7 @@ def load_and_validate_config() -> Dict[str, Any]:
 
         WORKFLOW_TIMEOUT_SECONDS = validate_type(
             "WORKFLOW_TIMEOUT_SECONDS", os.getenv(
-                "WORKFLOW_TIMEOUT_SECONDS"), int, 120
+                "WORKFLOW_TIMEOUT_SECONDS"), int, 240  # 기본값 240초
         )
         WORKFLOW_TIMEOUT_SECONDS = validate_range(
             "WORKFLOW_TIMEOUT_SECONDS",
@@ -246,8 +247,8 @@ _config = load_and_validate_config()
 OPENAI_API_KEY = _config.get("OPENAI_API_KEY")
 OPENAI_MODEL = _config.get("OPENAI_MODEL", "gpt-4o-mini")
 SERPAPI_KEY = _config.get("SERPAPI_KEY")
-LLM_TIMEOUT_SECONDS = _config.get("LLM_TIMEOUT_SECONDS", 60.0)
-LLM_MAX_RETRIES = _config.get("LLM_MAX_RETRIES", 2)
+LLM_TIMEOUT_SECONDS = _config.get("LLM_TIMEOUT_SECONDS", 180.0)  # 180초로 증가
+LLM_MAX_RETRIES = _config.get("LLM_MAX_RETRIES", 0)  # 리트라이 없음
 
 DATABASE_URL = _config.get("DATABASE_URL", "sqlite:///./history.db")
 PRICER_DATABASE_URL = _config.get(
@@ -259,7 +260,8 @@ DB_CONN_TIMEOUT = _config.get("DB_CONN_TIMEOUT", 30)
 
 HOST = _config.get("HOST", "0.0.0.0")
 PORT = _config.get("PORT", 8000)
-WORKFLOW_TIMEOUT_SECONDS = _config.get("WORKFLOW_TIMEOUT_SECONDS", 120)
+WORKFLOW_TIMEOUT_SECONDS = _config.get(
+    "WORKFLOW_TIMEOUT_SECONDS", 240)  # 180초 -> 240초 (여유있게)
 
 UPDATE_BATCH_LIMIT = _config.get("UPDATE_BATCH_LIMIT", 100)
 USER_AGENT = _config.get(
