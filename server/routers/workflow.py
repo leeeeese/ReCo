@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 # 워크플로우 인스턴스 생성 (싱글톤)
 _workflow_app = None
 
+
 def get_workflow_app():
     """워크플로우 앱 싱글톤"""
     global _workflow_app
@@ -43,7 +44,7 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         session_id = user_input.session_id
         conversation = get_or_create_conversation(session_id=session_id)
         session_id = conversation.session_id
-        
+
         # 사용자 메시지 저장
         add_message(
             session_id=session_id,
@@ -51,29 +52,20 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             content=user_input.search_query,
             metadata={"user_input": user_input.dict()}
         )
-        
+
         # 이전 대화 컨텍스트 조회
         conversation_context = get_conversation_context(session_id, limit=10)
-        
+
         # user_input에 대화 컨텍스트 추가
         user_input_dict = user_input.dict()
         user_input_dict["conversation_context"] = conversation_context
-        
-        # 초기 상태 생성
+
+        # 초기 상태 생성 (total=False이므로 필수 필드만)
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
-            "search_query": {},
-            "persona_classification": None,
-            "price_agent_recommendations": None,
-            "safety_agent_recommendations": None,
-            "final_seller_recommendations": None,
-            "final_item_scores": None,
-            "ranking_explanation": "",
             "current_step": "start",
             "completed_steps": [],
-            "error_message": None,
             "execution_start_time": time.time(),
-            "execution_time": None,
         }
 
         # LangGraph 워크플로우 실행 (타임아웃 포함)
@@ -81,24 +73,45 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
 
         loop = asyncio.get_running_loop()
 
+        logger.info(
+            "워크플로우 실행 시작",
+            extra={
+                "search_query": user_input.search_query,
+                "timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS,
+            }
+        )
+
         try:
             final_state = await asyncio.wait_for(
                 loop.run_in_executor(None, workflow_app.invoke, initial_state),
                 timeout=config.WORKFLOW_TIMEOUT_SECONDS,
             )
+
+            logger.info(
+                "워크플로우 실행 완료",
+                extra={
+                    "execution_time": final_state.get("execution_time"),
+                    "completed_steps": final_state.get("completed_steps", []),
+                    "has_error": bool(final_state.get("error_message")),
+                }
+            )
         except asyncio.TimeoutError:
             logger.error(
                 "워크플로우 실행 타임아웃",
-                extra={"timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS},
+                extra={
+                    "timeout_seconds": config.WORKFLOW_TIMEOUT_SECONDS,
+                    "search_query": user_input.search_query,
+                },
             )
             return {
                 "status": "error",
-                "error_message": "추천 시스템 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.",
+                "error_message": f"추천 시스템 응답이 지연되고 있습니다. (타임아웃: {config.WORKFLOW_TIMEOUT_SECONDS}초) 잠시 후 다시 시도해주세요.",
             }
 
-        # 실행 시간 계산
+        # 실행 시간 계산 (final_state는 불변이므로 변수에 저장)
+        execution_time = None
         if final_state.get("execution_start_time"):
-            final_state["execution_time"] = time.time() - final_state["execution_start_time"]
+            execution_time = time.time() - final_state["execution_start_time"]
 
         # 응답 생성
         response: Dict[str, Any] = {
@@ -114,29 +127,87 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             )
             return response
 
+        # final_item_scores 생성 (final_seller_recommendations에서 추출)
+        recommended_sellers = final_state.get(
+            "final_seller_recommendations") or []
+
+        # None 체크 및 타입 보장
+        if not isinstance(recommended_sellers, list):
+            logger.warning(
+                f"final_seller_recommendations가 리스트가 아닙니다: {type(recommended_sellers)}"
+            )
+            recommended_sellers = []
+
+        # final_item_scores 형식으로 변환
+        final_item_scores = []
+        for seller in recommended_sellers:
+            products = seller.get("products", [])
+            if products:
+                for product in products:
+                    final_item_scores.append({
+                        "product_id": product.get("product_id"),
+                        "seller_id": seller.get("seller_id"),
+                        "title": product.get("title", ""),
+                        "price": product.get("price", 0),
+                        "final_score": seller.get("final_score", 0.5),
+                        "ranking_factors": {
+                            "reasoning": seller.get("final_reasoning", ""),
+                            "product_score": seller.get("product_score", 0.5),
+                            "reliability_score": seller.get("reliability_score", 0.5),
+                        },
+                        "final_reasoning": seller.get("final_reasoning", ""),
+                        "seller_name": seller.get("seller_name", ""),
+                        "category": product.get("category", ""),
+                        "condition": product.get("condition", ""),
+                        "location": product.get("location", ""),
+                    })
+            else:
+                # 상품 정보가 없으면 판매자 정보만으로 생성
+                final_item_scores.append({
+                    "product_id": seller.get("seller_id", 0),
+                    "seller_id": seller.get("seller_id", 0),
+                    "title": seller.get("seller_name", ""),
+                    "price": 0,
+                    "final_score": seller.get("final_score", 0.5),
+                    "ranking_factors": {
+                        "reasoning": seller.get("final_reasoning", ""),
+                        "product_score": seller.get("product_score", 0.5),
+                        "reliability_score": seller.get("reliability_score", 0.5),
+                    },
+                    "final_reasoning": seller.get("final_reasoning", ""),
+                    "seller_name": seller.get("seller_name", ""),
+                    "category": "",
+                    "condition": "",
+                    "location": "",
+                })
+
+        # 점수 기준 정렬 및 상위 10개로 제한
+        final_item_scores.sort(key=lambda x: x.get(
+            "final_score", 0), reverse=True)
+        final_item_scores = final_item_scores[:10]
+
         # 성공 응답 구성
         response.update({
-            "persona_classification": final_state.get("persona_classification"),
-            "final_item_scores": final_state.get("final_item_scores", []),
-            "ranked_products": final_state.get("final_item_scores", []),  # 호환성을 위해
-            "final_seller_recommendations": final_state.get("final_seller_recommendations", []),
+            "final_item_scores": final_item_scores,
+            # 호환성을 위해
+            "ranked_products": final_item_scores,
+            "final_seller_recommendations": recommended_sellers,
             "ranking_explanation": final_state.get("ranking_explanation", ""),
             "current_step": final_state.get("current_step", "completed"),
             "completed_steps": final_state.get("completed_steps", []),
-            "execution_time": final_state.get("execution_time"),
+            "execution_time": execution_time,  # 계산된 실행 시간 사용
             "session_id": session_id,  # 세션 ID 반환
         })
-        
+
         # Assistant 메시지 저장
         if not final_state.get("error_message"):
             add_message(
                 session_id=session_id,
                 role="assistant",
-                content=f"추천 완료: {len(final_state.get('final_item_scores', []))}개 상품",
+                content=f"추천 완료: {len(final_item_scores)}개 상품",
                 metadata={
                     "recommendation_result": {
-                        "persona_classification": final_state.get("persona_classification"),
-                        "final_item_scores": final_state.get("final_item_scores", []),
+                        "final_item_scores": final_item_scores,
                         "ranking_explanation": final_state.get("ranking_explanation", ""),
                     }
                 }
@@ -160,7 +231,7 @@ async def stream_workflow_progress(
         session_id = user_input.session_id
         conversation = get_or_create_conversation(session_id=session_id)
         session_id = conversation.session_id
-        
+
         # 사용자 메시지 저장
         add_message(
             session_id=session_id,
@@ -168,21 +239,20 @@ async def stream_workflow_progress(
             content=user_input.search_query,
             metadata={"user_input": user_input.dict()}
         )
-        
+
         # 이전 대화 컨텍스트 조회
         conversation_context = get_conversation_context(session_id, limit=10)
-        
+
         # user_input에 대화 컨텍스트 추가
         user_input_dict = user_input.dict()
         user_input_dict["conversation_context"] = conversation_context
-        
+
         # 초기 상태 생성
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
             "search_query": {},
-            "persona_classification": None,
-            "price_agent_recommendations": None,
-            "safety_agent_recommendations": None,
+            "product_agent_recommendations": None,
+            "reliability_agent_recommendations": None,
             "final_seller_recommendations": None,
             "final_item_scores": None,
             "ranking_explanation": "",
@@ -221,14 +291,14 @@ async def stream_workflow_progress(
 
             # 백그라운드에서 스트림 실행
             states = await loop.run_in_executor(None, run_stream)
-            
+
             # 각 상태를 순차적으로 전송
             for state in states:
                 # state는 딕셔너리 형태로 각 노드의 이름을 키로 가짐
                 for node_name, node_state in state.items():
                     current_step = node_state.get("current_step", "processing")
                     completed_steps = node_state.get("completed_steps", [])
-                    
+
                     # 진행률 계산
                     progress = 0
                     if current_step in step_weights:
@@ -236,18 +306,20 @@ async def stream_workflow_progress(
                     elif len(completed_steps) > 0:
                         # 완료된 단계 수에 따라 진행률 계산
                         total_steps = 4  # init, price, safety, orchestrator
-                        progress = min(int((len(completed_steps) / total_steps) * 100), 90)
+                        progress = min(
+                            int((len(completed_steps) / total_steps) * 100), 90)
 
                     # 단계별 메시지 생성
                     messages = {
                         "start": "워크플로우 시작",
-                        "initialized": "페르소나 분류 및 검색 쿼리 생성 완료",
-                        "price_analyzed": "가격 분석 완료",
-                        "safety_analyzed": "안전성 분석 완료",
+                        "initialized": "검색 쿼리 생성 완료",
+                        "price_analyzed": "상품 특성 분석 완료",
+                        "safety_analyzed": "신뢰도 분석 완료",
                         "recommendation_completed": "추천 완료",
                         "error": "오류 발생",
                     }
-                    message = messages.get(current_step, f"{current_step} 처리 중...")
+                    message = messages.get(
+                        current_step, f"{current_step} 처리 중...")
 
                     # 진행 상황 전송
                     progress_data = {
@@ -274,11 +346,11 @@ async def stream_workflow_progress(
                     if current_step == "recommendation_completed":
                         # 실행 시간 계산
                         if node_state.get("execution_start_time"):
-                            node_state["execution_time"] = time.time() - node_state.get("execution_start_time", time.time())
-                        
+                            node_state["execution_time"] = time.time(
+                            ) - node_state.get("execution_start_time", time.time())
+
                         final_data = {
                             "type": "complete",
-                            "persona_classification": node_state.get("persona_classification"),
                             "final_item_scores": node_state.get("final_item_scores", []),
                             "final_seller_recommendations": node_state.get("final_seller_recommendations", []),
                             "ranking_explanation": node_state.get("ranking_explanation", ""),
@@ -286,7 +358,7 @@ async def stream_workflow_progress(
                             "session_id": session_id,  # 세션 ID 반환
                         }
                         yield f"data: {json.dumps(final_data, ensure_ascii=False)}\n\n"
-                        
+
                         # Assistant 메시지 저장
                         add_message(
                             session_id=session_id,
@@ -294,7 +366,6 @@ async def stream_workflow_progress(
                             content=f"추천 완료: {len(node_state.get('final_item_scores', []))}개 상품",
                             metadata={
                                 "recommendation_result": {
-                                    "persona_classification": node_state.get("persona_classification"),
                                     "final_item_scores": node_state.get("final_item_scores", []),
                                     "ranking_explanation": node_state.get("ranking_explanation", ""),
                                 }
@@ -337,6 +408,71 @@ async def recommend_products_stream(user_input: UserInput):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/chat")
+async def chat(message: Dict[str, str]) -> Dict[str, str]:
+    """
+    일반 대화 API (LLM 기반)
+    """
+    user_message = message.get("message", "").strip()
+
+    if not user_message:
+        return {
+            "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?"
+        }
+
+    try:
+        # LLM을 사용한 자연스러운 대화
+        from server.utils.llm_agent import LLMAgent
+
+        # 일반 채팅용 LLM 에이전트 (빠른 응답을 위해 gpt-4o-mini + 짧은 타임아웃)
+        chat_agent = LLMAgent(
+            system_prompt="""당신은 중고거래 상품 추천 서비스 ReCo의 친절한 AI 어시스턴트입니다.
+사용자와 자연스럽고 친근하게 대화하며, 중고거래 상품 추천 서비스를 소개하고 도와드립니다.
+- 인사말에는 친근하게 응답하세요
+- 감사 표현에는 겸손하게 응답하세요
+- 질문에는 간단명료하게 답변하세요
+- 상품 추천이 필요하면 상품명을 입력하라고 안내하세요
+- 항상 한국어로 응답하세요
+- 응답은 1-2문장으로 간결하게 작성하세요""",
+            model="gpt-4o-mini"  # 빠른 응답을 위해 4o-mini 사용
+        )
+
+        # 일반 채팅용 짧은 타임아웃 설정 (30초)
+        chat_agent.request_timeout = 30.0
+        chat_agent.max_retries = 1
+
+        # LLM 호출 (텍스트 형식)
+        result = chat_agent.decide(
+            context={"user_message": user_message},
+            decision_task=f"사용자가 '{user_message}'라고 말했습니다. 자연스럽고 친근하게 응답해주세요.",
+            format="text"
+        )
+
+        if result.get("error") or result.get("fallback"):
+            # LLM 호출 실패 시 기본 응답
+            logger.warning("일반 대화 LLM 호출 실패, 기본 응답 사용", extra={
+                           "error": result.get("error")})
+            return {
+                "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다."
+            }
+
+        # LLM 응답 추출
+        llm_response = result.get("result", "").strip()
+        if llm_response:
+            return {"response": llm_response}
+        else:
+            return {
+                "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 무엇을 찾고 계신가요?"
+            }
+
+    except Exception as e:
+        logger.exception("일반 대화 처리 중 오류 발생")
+        # 에러 발생 시 기본 응답
+        return {
+            "response": "안녕하세요! 중고거래 상품 추천을 도와드릴 수 있습니다. 찾고 계신 상품을 알려주시면 추천해드릴 수 있습니다."
+        }
 
 
 @router.get("/health")

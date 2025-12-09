@@ -108,19 +108,21 @@ def load_and_validate_config() -> Dict[str, Any]:
 
         # 선택적 환경 변수 (기본값 있음)
         OPENAI_MODEL = validate_type(
-            "OPENAI_MODEL", os.getenv("OPENAI_MODEL"), str, "gpt-4o-mini"
+            "OPENAI_MODEL", os.getenv("OPENAI_MODEL"), str, "gpt-5-mini"
         )
         SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # 선택사항
 
         LLM_TIMEOUT_SECONDS = validate_type(
-            "LLM_TIMEOUT_SECONDS", os.getenv("LLM_TIMEOUT_SECONDS"), float, 30.0
+            "LLM_TIMEOUT_SECONDS", os.getenv(
+                "LLM_TIMEOUT_SECONDS"), float, 180.0  # 기본값 180초
         )
         LLM_TIMEOUT_SECONDS = validate_range(
             "LLM_TIMEOUT_SECONDS", LLM_TIMEOUT_SECONDS, min_value=1.0, max_value=300.0
         )
 
         LLM_MAX_RETRIES = validate_type(
-            "LLM_MAX_RETRIES", os.getenv("LLM_MAX_RETRIES"), int, 2
+            "LLM_MAX_RETRIES", os.getenv(
+                "LLM_MAX_RETRIES"), int, 0  # 기본값 0 (리트라이 없음)
         )
         LLM_MAX_RETRIES = validate_range(
             "LLM_MAX_RETRIES", LLM_MAX_RETRIES, min_value=0, max_value=10
@@ -144,7 +146,8 @@ def load_and_validate_config() -> Dict[str, Any]:
         DB_POOL_SIZE = validate_type(
             "DB_POOL_SIZE", os.getenv("DB_POOL_SIZE"), int, 5
         )
-        DB_POOL_SIZE = validate_range("DB_POOL_SIZE", DB_POOL_SIZE, min_value=1, max_value=100)
+        DB_POOL_SIZE = validate_range(
+            "DB_POOL_SIZE", DB_POOL_SIZE, min_value=1, max_value=100)
 
         DB_MAX_OVERFLOW = validate_type(
             "DB_MAX_OVERFLOW", os.getenv("DB_MAX_OVERFLOW"), int, 10
@@ -173,7 +176,8 @@ def load_and_validate_config() -> Dict[str, Any]:
         PORT = validate_range("PORT", PORT, min_value=1, max_value=65535)
 
         WORKFLOW_TIMEOUT_SECONDS = validate_type(
-            "WORKFLOW_TIMEOUT_SECONDS", os.getenv("WORKFLOW_TIMEOUT_SECONDS"), int, 60
+            "WORKFLOW_TIMEOUT_SECONDS", os.getenv(
+                "WORKFLOW_TIMEOUT_SECONDS"), int, 240  # 기본값 240초
         )
         WORKFLOW_TIMEOUT_SECONDS = validate_range(
             "WORKFLOW_TIMEOUT_SECONDS",
@@ -199,7 +203,8 @@ def load_and_validate_config() -> Dict[str, Any]:
 
         # Redis 설정 (선택사항)
         REDIS_URL = validate_type(
-            "REDIS_URL", os.getenv("REDIS_URL"), str, "redis://localhost:6379/0"
+            "REDIS_URL", os.getenv(
+                "REDIS_URL"), str, "redis://localhost:6379/0"
         )
         REDIS_ENABLED = validate_type(
             "REDIS_ENABLED", os.getenv("REDIS_ENABLED"), bool, False
@@ -253,11 +258,12 @@ _config = load_and_validate_config()
 OPENAI_API_KEY = _config.get("OPENAI_API_KEY")
 OPENAI_MODEL = _config.get("OPENAI_MODEL", "gpt-4o-mini")
 SERPAPI_KEY = _config.get("SERPAPI_KEY")
-LLM_TIMEOUT_SECONDS = _config.get("LLM_TIMEOUT_SECONDS", 30.0)
-LLM_MAX_RETRIES = _config.get("LLM_MAX_RETRIES", 2)
+LLM_TIMEOUT_SECONDS = _config.get("LLM_TIMEOUT_SECONDS", 180.0)  # 180초로 증가
+LLM_MAX_RETRIES = _config.get("LLM_MAX_RETRIES", 0)  # 리트라이 없음
 
 DATABASE_URL = _config.get("DATABASE_URL", "sqlite:///./history.db")
-PRICER_DATABASE_URL = _config.get("PRICER_DATABASE_URL", "sqlite:///./used_pricer.db")
+PRICER_DATABASE_URL = _config.get(
+    "PRICER_DATABASE_URL", "sqlite:///./used_pricer.db")
 DB_POOL_SIZE = _config.get("DB_POOL_SIZE", 5)
 DB_MAX_OVERFLOW = _config.get("DB_MAX_OVERFLOW", 10)
 DB_POOL_TIMEOUT = _config.get("DB_POOL_TIMEOUT", 30)
@@ -265,7 +271,8 @@ DB_CONN_TIMEOUT = _config.get("DB_CONN_TIMEOUT", 30)
 
 HOST = _config.get("HOST", "0.0.0.0")
 PORT = _config.get("PORT", 8000)
-WORKFLOW_TIMEOUT_SECONDS = _config.get("WORKFLOW_TIMEOUT_SECONDS", 60)
+WORKFLOW_TIMEOUT_SECONDS = _config.get(
+    "WORKFLOW_TIMEOUT_SECONDS", 240)  # 180초 -> 240초 (여유있게)
 
 UPDATE_BATCH_LIMIT = _config.get("UPDATE_BATCH_LIMIT", 100)
 USER_AGENT = _config.get(

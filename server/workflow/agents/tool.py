@@ -1,6 +1,6 @@
 """
 공통 툴: 서브에이전트에서 사용할 수 있는 공통 함수들
-PriceAgent, SafetyAgent에서 재사용 가능
+ProductAgent, ReliabilityAgent에서 재사용 가능
 """
 
 from typing import Dict, Any, List
@@ -151,14 +151,14 @@ def seller_profile_tool(seller_id: int) -> Dict[str, Any]:
 
 
 """
-PriceAgent 전용 툴
+ProductAgent 전용 툴
 - DB에서 상품 시세 통계와 판매자 프로필 정보를 계산
 """
 
 
 def item_market_tool(product_id: int) -> Dict[str, Any]:
     """
-    PriceAgent 전용 툴:
+    ProductAgent 전용 툴:
     - DB에서 같은 카테고리/유사 상품들의 가격 분포를 보고
       시세와 현재 가격의 차이를 정량화한다.
     """
@@ -230,7 +230,7 @@ def price_risk_tool(
     seller_profile: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    PriceAgent 전용 툴:
+    ProductAgent 전용 툴:
     - 시세 대비 가격(market_features) + 판매자 신뢰도(seller_profile)를 종합해
       '가격 메리트'를 0~100 점수와 태그로 요약한다.
     """
@@ -285,7 +285,7 @@ def price_risk_tool(
 
 def trade_risk_tool(product_id: int) -> Dict[str, Any]:
     """
-    SafetyAgent 전용 툴:
+    ReliabilityAgent 전용 툴:
     - 거래 방식, 안전결제 사용 여부, 카테고리 등을 기준으로
       거래 구조의 위험도를 0~100 점수와 태그로 반환한다.
     """
@@ -361,7 +361,7 @@ def review_feature_tool(
     max_reviews: int = 20,
 ) -> Dict[str, Any]:
     """
-    SafetyAgent / PriceAgent 공통 툴:
+    ProductAgent / ReliabilityAgent 공통 툴:
     - 최근 리뷰 내용을 요약해 긍/부정 키워드 및 길이 등을 분석한다.
     """
     db: Session = SessionLocal()

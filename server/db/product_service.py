@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from server.db.database import SessionLocal
 from server.db.models import Product, Seller
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_sellers_with_products(
@@ -41,7 +44,7 @@ def get_sellers_with_products(
         total_product_count = db.query(Product).count()
         if total_product_count == 0:
             return []  # DB에 상품이 없으면 빈 리스트 반환
-        
+
         # 기본 쿼리: Product와 Seller 조인
         query = db.query(Product, Seller).join(
             Seller, Product.seller_id == Seller.seller_id
@@ -51,14 +54,45 @@ def get_sellers_with_products(
         filters = []
 
         if search_query:
-            # 대소문자 구분 없이 부분 문자열 검색 (SQLite는 ilike 미지원)
-            search_query_lower = search_query.lower()
-            filters.append(
-                or_(
-                    func.lower(Product.title).contains(search_query_lower),
-                    func.lower(Product.description).contains(search_query_lower)
+            # 검색어를 키워드로 분리하여 각 키워드가 포함되는지 확인 (AND 조건)
+            # 공백으로 분리하고, 각 키워드가 제목 또는 설명에 포함되어야 함
+            keywords = [kw.strip().lower()
+                        for kw in search_query.split() if kw.strip()]
+
+            if keywords:
+                # 각 키워드에 대해 제목 또는 설명에 포함되는지 확인
+                keyword_filters = []
+                for keyword in keywords:
+                    keyword_filters.append(
+                        or_(
+                            func.lower(Product.title).contains(keyword),
+                            func.lower(Product.description).contains(keyword)
+                        )
+                    )
+                # 모든 키워드가 포함되어야 함 (AND 조건)
+                filters.append(and_(*keyword_filters))
+                logger.debug(
+                    "검색 쿼리 필터 적용",
+                    extra={
+                        "search_query": search_query,
+                        "keywords": keywords,
+                        "keyword_count": len(keywords)
+                    }
                 )
-            )
+            else:
+                # 키워드가 없으면 원본 검색어로 검색
+                search_query_lower = search_query.lower()
+                filters.append(
+                    or_(
+                        func.lower(Product.title).contains(search_query_lower),
+                        func.lower(Product.description).contains(
+                            search_query_lower)
+                    )
+                )
+                logger.debug(
+                    "검색 쿼리 필터 적용 (단일 검색어)",
+                    extra={"search_query": search_query}
+                )
 
         if category:
             filters.append(Product.category == category)
@@ -80,6 +114,16 @@ def get_sellers_with_products(
 
         # 정렬: 조회수 높은 순
         results = query.order_by(Product.view_count.desc()).limit(limit).all()
+
+        logger.info(
+            "상품 조회 완료",
+            extra={
+                "result_count": len(results),
+                "search_query": search_query,
+                "category": category,
+                "price_range": f"{price_min}-{price_max}" if price_min or price_max else None
+            }
+        )
 
         # 판매자별로 그룹화
         sellers_dict = {}
@@ -190,6 +234,7 @@ def search_products_by_keywords(
 ) -> List[Dict[str, Any]]:
     """
     키워드로 상품 검색 (검색 쿼리 파싱 후 사용)
+    각 키워드가 제목 또는 설명에 포함되어야 함 (AND 조건)
 
     Args:
         keywords: 검색 키워드 리스트
@@ -210,10 +255,28 @@ def search_products_by_keywords(
             price_max=price_max,
             limit=limit
         )
-    
-    # 키워드가 하나면 그대로 사용, 여러 개면 공백으로 연결
-    # 짧은 단어도 검색되도록 개선
-    search_query = " ".join(keywords) if len(keywords) > 1 else keywords[0]
+
+    # 키워드를 공백으로 연결하여 검색 (get_sellers_with_products에서 키워드별 AND 조건으로 처리)
+    # 중복 제거 및 정규화
+    unique_keywords = []
+    seen = set()
+    for kw in keywords:
+        kw_clean = kw.strip().lower()
+        if kw_clean and kw_clean not in seen:
+            unique_keywords.append(kw_clean)
+            seen.add(kw_clean)
+
+    if not unique_keywords:
+        return get_sellers_with_products(
+            search_query=None,
+            category=category,
+            price_min=price_min,
+            price_max=price_max,
+            limit=limit
+        )
+
+    # 키워드를 공백으로 연결 (get_sellers_with_products에서 분리하여 AND 조건으로 처리)
+    search_query = " ".join(unique_keywords)
 
     return get_sellers_with_products(
         search_query=search_query,

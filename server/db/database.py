@@ -11,6 +11,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from server.utils import config
 
 # 환경 변수에서 DB URL 가져오기
+# config.py에서 검증된 값을 사용하되, 순환 참조 방지를 위해 직접 os.getenv 사용
+import os
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./history.db")
 
 

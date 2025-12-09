@@ -10,16 +10,16 @@ from openai import OpenAI
 from server.utils import config
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 
 
 class LLMAgent:
     """LLM 기반 의사결정 에이전트"""
 
-    def __init__(self, system_prompt: str = None):
+    def __init__(self, system_prompt: str = None, model: str = None):
         self.client = OpenAI(
             api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-        self.model = OPENAI_MODEL
+        self.model = model or OPENAI_MODEL  # 커스텀 모델 또는 기본 모델 사용
         self.system_prompt = system_prompt
         self.max_retries = config.LLM_MAX_RETRIES
         self.request_timeout = config.LLM_TIMEOUT_SECONDS
@@ -45,39 +45,53 @@ class LLMAgent:
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
 
-        user_prompt = self._build_prompt(context, decision_task, options)
+        user_prompt = self._build_prompt(
+            context, decision_task, options, format)
         messages.append({"role": "user", "content": user_prompt})
 
         last_error: Optional[Exception] = None
 
-        for attempt in range(self.max_retries):
+        # max_retries=0이면 1번만 시도, max_retries=1이면 최대 2번 시도
+        max_attempts = self.max_retries + 1
+
+        for attempt in range(max_attempts):
             try:
+                # gpt-5-mini는 temperature=1만 지원하므로 파라미터 제거 (기본값 사용)
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     response_format={
                         "type": "json_object"} if format == "json" else None,
-                    temperature=0.7,  # 창의적 판단을 위한 적절한 온도
                     timeout=self.request_timeout,
                 )
 
                 result = response.choices[0].message.content
                 if format == "json":
                     import json
-                    return json.loads(result)
+                    try:
+                        return json.loads(result)
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패 시 텍스트로 반환
+                        logger.warning(f"JSON 파싱 실패, 텍스트로 반환: {result[:100]}")
+                        return {"result": result, "error": "JSON 파싱 실패"}
                 return {"result": result}
 
             except Exception as e:
                 last_error = e
-                if attempt < self.max_retries - 1:
+                if attempt < max_attempts - 1:  # 마지막 시도가 아니면 재시도
                     sleep_for = 2 ** attempt
                     time.sleep(sleep_for)
                     continue
 
         return {"error": str(last_error) if last_error else "LLM 호출 실패", "fallback": True}
 
-    def _build_prompt(self, context: Dict[str, Any], task: str, options: Optional[List[Any]]) -> str:
+    def _build_prompt(self, context: Dict[str, Any], task: str, options: Optional[List[Any]], format: str = "json") -> str:
         """프롬프트 구성"""
+        # format이 "text"인 경우 간단한 프롬프트
+        if format == "text":
+            return task
+
+        # JSON 형식인 경우 기존 로직 사용
         prompt = f"다음 정보를 바탕으로 {task}를 수행해주세요.\n\n"
         prompt += "## 컨텍스트 정보:\n"
         for key, value in context.items():
@@ -115,28 +129,31 @@ class LLMAgent:
         return self.decide(context, f"다음 서브에이전트들의 결과를 종합하여 {combination_task}")
 
 
-def create_agent(agent_type: str, system_prompt: str = None) -> LLMAgent:
+def create_agent(agent_type: str, system_prompt: str = None, model: str = None) -> LLMAgent:
     """에이전트 타입별로 생성"""
-    default_prompts = {
-        "persona_classifier": """당신은 중고거래 사용자의 특성을 분석하여 페르소나를 분류하는 전문가입니다.
-사용자의 선호도와 행동 패턴을 종합적으로 분석하여 가장 적합한 페르소나를 결정하세요.""",
+    # 기본 프롬프트 (모든 에이전트에 공통 적용)
+    default_prompt = """You are the primary ReAct agent that transforms marketplace signals into a structured seller evaluation profile.
 
-        "price_agent": """당신은 중고거래에서 합리적인 가격을 판단하는 전문가입니다.
-실시간 시세, 상품 상태, 거래 방식 등 복합적인 요소를 고려하여 
-사용자가 합리적이라고 판단할 만한 가격 범위를 결정하세요.""",
+    Core Objective:
+    Integrate data from product features, pricing patterns, seller activity logs, reliability metrics, and risk indicators to help the orchestrator generate final recommendations.
 
-        "safety_agent": """당신은 중고거래에서 안전거래 방식을 평가하는 전문가입니다.
-거래 안전도, 결제 방식, 판매자 신뢰도 등을 종합하여 
-사용자와 가장 잘 어울리는 안전한 판매자를 추천하세요.""",
+    What you must do:
+    1. Analyze user intent and constraints.
+    2. Perform ReAct reasoning cycles to identify missing information.
+    3. Call tools to fetch listing data, compute price risk, retrieve seller behavior, or validate transaction safety.
+    4. Convert raw tool outputs into normalized scoring factors:
+    - product_quality_score
+    - price_fairness_score
+    - reliability_score
+    - safety_risk_score
+    5. Output results in a consistent machine-readable format for the orchestrator.
+    6. Speak Korean to the user, but keep internal reasoning and JSON structures in English.
 
-        "persona_matching_agent": """당신은 사용자와 판매자의 페르소나를 매칭하는 전문가입니다.
-사용자의 선호도와 판매자의 특성을 비교하여 
-가장 잘 어울리는 판매자를 추천하세요.""",
+    Principles:
+    - No hallucination.
+    - No guessing when missing data can be retrieved.
+    - Always justify rankings through explicit evidence.
+    """
 
-        "final_matcher": """당신은 여러 서브에이전트의 판단을 종합하여 최종 추천을 결정하는 전문가입니다.
-가격, 안전거래, 페르소나 매칭의 결과를 종합 분석하여 
-사용자에게 가장 적합한 판매자를 최종 추천하세요."""
-    }
-
-    prompt = system_prompt or default_prompts.get(agent_type, "")
-    return LLMAgent(system_prompt=prompt)
+    prompt = system_prompt or default_prompt
+    return LLMAgent(system_prompt=prompt, model=model)

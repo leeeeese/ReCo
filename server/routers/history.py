@@ -43,7 +43,7 @@ async def create_history(
     history = History(
         user_input=history_data.user_input.dict(),
         search_query=history_data.search_query,
-        persona_type=history_data.persona_type,
+        persona_type=None,  # 페르소나 사용 안 함
         results=[r.dict() for r in history_data.results]
     )
     db.add(history)

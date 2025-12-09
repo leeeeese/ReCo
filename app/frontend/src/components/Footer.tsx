@@ -1,5 +1,5 @@
 import { Facebook, Twitter, Instagram, Linkedin } from 'lucide-react';
-import logo from 'figma:asset/be4e933247d398b35fc960ad2df357273b46c0e1.png';
+import logo from '../assets/be4e933247d398b35fc960ad2df357273b46c0e1.png';
 
 export default function Footer() {
   return (
