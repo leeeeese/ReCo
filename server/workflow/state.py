@@ -8,8 +8,8 @@ from operator import add
 
 # ==================== 워크플로우 State ====================
 
-class RecommendationState(TypedDict):
-    """추천 워크플로우 상태"""
+class RecommendationState(TypedDict, total=False):
+    """추천 워크플로우 상태 - total=False로 모든 필드가 선택적"""
     # 입력 데이터
     user_input: Dict[str, Any]
     search_query: Optional[Dict[str, Any]]

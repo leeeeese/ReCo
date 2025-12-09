@@ -289,7 +289,7 @@ class OrchestratorAgent:
         }
 
 
-def orchestrator_agent_node(state: RecommendationState) -> RecommendationState:
+def orchestrator_agent_node(state: RecommendationState) -> dict:
     """최종 통합 및 랭킹 에이전트 노드"""
     try:
         user_input = state["user_input"]

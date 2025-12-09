@@ -148,7 +148,7 @@ class ReliabilityAgent:
         return recommended_sellers
 
 
-def reliability_agent_node(state: RecommendationState) -> RecommendationState:
+def reliability_agent_node(state: RecommendationState) -> dict:
     """신뢰도 분석 에이전트 노드"""
     try:
         user_input = state["user_input"]

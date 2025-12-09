@@ -261,20 +261,35 @@ def _filter_products_by_user_input(
             continue
 
         # 검색어 필터 (제목/설명에 포함)
-        # 키워드가 여러 개일 경우 모든 키워드가 포함되어야 함 (AND 조건)
+        # 불용어 제거 후 주요 키워드만 사용 (OR 조건 - 하나라도 매칭되면 통과)
         if search_query:
-            # 검색어를 키워드로 분리
-            keywords = [kw.strip().lower()
-                        for kw in search_query.split() if kw.strip()]
+            # 불용어 목록 (한국어 조사, 어미, 의미 없는 단어)
+            stopwords = {
+                "나는", "나", "는", "은", "이", "가", "을", "를", "에", "에서", "의", "와", "과",
+                "하는", "되는", "있는", "없는", "된", "한", "하다", "되다",
+                "있다", "없다", "이다", "아니다", "그", "저", "이", "그것", "저것",
+                "것", "수", "등", "들", "및", "또한", "및", "또는",
+                "추천", "받고", "싶어", "원해", "찾아", "줘", "주세요", "해줘",
+                "친절한", "판매자가", "파는", "가격이", "싼", "비싼", "좋은"
+            }
+
+            # 검색어를 키워드로 분리하고 불용어 제거
+            keywords = [
+                kw.strip().lower()
+                for kw in search_query.split()
+                if kw.strip() and kw.strip().lower() not in stopwords
+            ]
+
             if keywords:
                 title = product.get("title", "").lower()
                 description = product.get("description", "").lower()
-                # 모든 키워드가 제목 또는 설명에 포함되어야 함
-                all_keywords_match = all(
+
+                # 적어도 하나의 키워드가 제목 또는 설명에 포함되면 통과 (OR 조건)
+                any_keyword_match = any(
                     keyword in title or keyword in description
                     for keyword in keywords
                 )
-                if not all_keywords_match:
+                if not any_keyword_match:
                     continue
 
         filtered.append(product)

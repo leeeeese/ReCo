@@ -222,7 +222,7 @@ class ProductAgent:
         return recommended_sellers
 
 
-def product_agent_node(state: RecommendationState) -> RecommendationState:
+def product_agent_node(state: RecommendationState) -> dict:
     """상품 특성 분석 에이전트 노드"""
     try:
         user_input = state["user_input"]

@@ -60,20 +60,12 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
         user_input_dict = user_input.dict()
         user_input_dict["conversation_context"] = conversation_context
 
-        # 초기 상태 생성
+        # 초기 상태 생성 (total=False이므로 필수 필드만)
         initial_state: RecommendationState = {
             "user_input": user_input_dict,
-            "search_query": {},
-            "product_agent_recommendations": None,
-            "reliability_agent_recommendations": None,
-            "final_seller_recommendations": None,
-            "final_item_scores": None,
-            "ranking_explanation": "",
             "current_step": "start",
             "completed_steps": [],
-            "error_message": None,
             "execution_start_time": time.time(),
-            "execution_time": None,
         }
 
         # LangGraph 워크플로우 실행 (타임아웃 포함)
@@ -116,10 +108,10 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
                 "error_message": f"추천 시스템 응답이 지연되고 있습니다. (타임아웃: {config.WORKFLOW_TIMEOUT_SECONDS}초) 잠시 후 다시 시도해주세요.",
             }
 
-        # 실행 시간 계산
+        # 실행 시간 계산 (final_state는 불변이므로 변수에 저장)
+        execution_time = None
         if final_state.get("execution_start_time"):
-            final_state["execution_time"] = time.time(
-            ) - final_state["execution_start_time"]
+            execution_time = time.time() - final_state["execution_start_time"]
 
         # 응답 생성
         response: Dict[str, Any] = {
@@ -137,7 +129,14 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
 
         # final_item_scores 생성 (final_seller_recommendations에서 추출)
         recommended_sellers = final_state.get(
-            "final_seller_recommendations", [])
+            "final_seller_recommendations") or []
+
+        # None 체크 및 타입 보장
+        if not isinstance(recommended_sellers, list):
+            logger.warning(
+                f"final_seller_recommendations가 리스트가 아닙니다: {type(recommended_sellers)}"
+            )
+            recommended_sellers = []
 
         # final_item_scores 형식으로 변환
         final_item_scores = []
@@ -195,7 +194,7 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             "ranking_explanation": final_state.get("ranking_explanation", ""),
             "current_step": final_state.get("current_step", "completed"),
             "completed_steps": final_state.get("completed_steps", []),
-            "execution_time": final_state.get("execution_time"),
+            "execution_time": execution_time,  # 계산된 실행 시간 사용
             "session_id": session_id,  # 세션 ID 반환
         })
 
@@ -204,10 +203,10 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
             add_message(
                 session_id=session_id,
                 role="assistant",
-                content=f"추천 완료: {len(final_state.get('final_item_scores', []))}개 상품",
+                content=f"추천 완료: {len(final_item_scores)}개 상품",
                 metadata={
                     "recommendation_result": {
-                        "final_item_scores": final_state.get("final_item_scores", []),
+                        "final_item_scores": final_item_scores,
                         "ranking_explanation": final_state.get("ranking_explanation", ""),
                     }
                 }
