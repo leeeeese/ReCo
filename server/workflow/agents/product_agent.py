@@ -114,9 +114,23 @@ class ProductAgent:
         # -------------------------------------------------------------
         # 🔥 2) LLM에게 넘길 context 구성
         # -------------------------------------------------------------
+        # -------------------------------------------------------------
+        # 🔥 (NEW) seller_id 기반 매핑 생성 — zip() 제거
+        # -------------------------------------------------------------
+        # seller_product_data 내부는 seller_id 포함된 dict 리스트
+        seller_data_map = {
+            str(item["seller_id"]): item
+            for item in seller_product_data
+        }
+
+        # -------------------------------------------------------------
+        # 🔥 context 구성 (zip → seller_id 매핑 방식으로 변경)
+        # -------------------------------------------------------------
         context = {
             "user_price_min": user_input.get("price_min", 0),
             "user_price_max": user_input.get("price_max", 1e9),
+
+            # 모든 상품 flat list 형태
             "products": [
                 {
                     "product_id": p.get("product_id"),
@@ -130,20 +144,34 @@ class ProductAgent:
                 for seller in sellers_with_products
                 for p in seller.get("products", [])
             ],
+
+            # 각 seller_id별 상품 feature 매핑
             "product_features": {
-                str(seller.get("seller_id")): seller_data.get("product_features", {})
-                for seller, seller_data in zip(sellers_with_products, seller_product_data)
+                str(seller["seller_id"]): seller_data_map.get(
+                    str(seller["seller_id"]), {}
+                ).get("product_features", {})
+                for seller in sellers_with_products
             },
+
+            # seller profile + review feature 매핑
             "seller_features": {
-                str(seller.get("seller_id")): {
-                    "seller_profile": seller_data.get("seller_profile", {}),
-                    "review_features": seller_data.get("review_features", {}),
+                str(seller["seller_id"]): {
+                    "seller_profile": seller_data_map.get(
+                        str(seller["seller_id"]), {}
+                    ).get("seller_profile", {}),
+                    "review_features": seller_data_map.get(
+                        str(seller["seller_id"]), {}
+                    ).get("review_features", {}),
                 }
-                for seller, seller_data in zip(sellers_with_products, seller_product_data)
+                for seller in sellers_with_products
             },
+
+            # 시장가격 정보 매핑
             "market_prices": {
-                str(seller.get("seller_id")): seller_data.get("market_prices", {})
-                for seller, seller_data in zip(sellers_with_products, seller_product_data)
+                str(seller["seller_id"]): seller_data_map.get(
+                    str(seller["seller_id"]), {}
+                ).get("market_prices", {})
+                for seller in sellers_with_products
             },
         }
 

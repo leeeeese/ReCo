@@ -105,7 +105,21 @@ class ReliabilityAgent:
         # -------------------------------------------------------------
         # 🔥 4) LLM 결과를 기반으로 판매자 점수 계산
         # -------------------------------------------------------------
-        recommended_sellers_result = decision.get("recommended_sellers", {})
+        raw = decision.get("recommended_sellers", {})
+
+        # normalize to dict[str, dict]
+        if isinstance(raw, dict):
+            recommended_sellers_result = {
+                str(k): v for k, v in raw.items() if isinstance(v, dict)
+            }
+        elif isinstance(raw, list):
+            recommended_sellers_result = {
+                str(item.get("seller_id")): item
+                for item in raw
+                if isinstance(item, dict) and item.get("seller_id") is not None
+            }
+        else:
+            recommended_sellers_result = {}
 
         recommended_sellers: List[Dict[str, Any]] = []
         for seller in sellers_with_products:

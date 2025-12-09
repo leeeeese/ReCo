@@ -136,35 +136,59 @@ class OrchestratorAgent:
             logger.warning("LLM 결과에 final_recommendations 없음, 기본 결합 로직 사용")
             return self._fallback_combine(product_sellers, reliability_sellers)
 
+        # LLM이 준 seller_ids / scores 원본
         seller_ids = final_recommendations.get("seller_ids", [])
-        scores = final_recommendations.get("scores", {})
+        raw_scores = final_recommendations.get("scores", {})
+
+        # 🔥 scores를 항상 dict[str, dict] 형태로 정규화
+        scores: Dict[str, Dict[str, Any]] = {}
+
+        # case 1: 이미 dict인 경우
+        if isinstance(raw_scores, dict):
+            scores = {
+                str(k): v
+                for k, v in raw_scores.items()
+                if isinstance(v, dict)
+            }
+
+        # case 2: list로 온 경우 (예: [{"seller_id": ..., "score": ...}, ...])
+        elif isinstance(raw_scores, list):
+            for item in raw_scores:
+                if isinstance(item, dict) and "seller_id" in item:
+                    sid = item.get("seller_id")
+                    if sid is not None:
+                        scores[str(sid)] = item
+
+        # case 3: 그 외(str/None 등)는 무시 → 빈 dict 유지
+        else:
+            scores = {}
 
         if not seller_ids:
             logger.warning("LLM 결과에 seller_ids 없음, 기본 결합 로직 사용")
             return self._fallback_combine(product_sellers, reliability_sellers)
 
         # 판매자 ID를 정수로 변환
-        recommended_seller_ids = []
+        recommended_seller_ids: List[int] = []
         for seller_id in seller_ids:
             try:
                 recommended_seller_ids.append(int(seller_id))
             except (ValueError, TypeError):
                 try:
                     recommended_seller_ids.append(int(str(seller_id)))
-                except:
+                except Exception:
                     logger.warning(f"판매자 ID 변환 실패: {seller_id}")
                     continue
 
         # 판매자 정보 통합 (ProductAgent와 ReliabilityAgent 결과 병합)
-        all_sellers = {}
+        all_sellers: Dict[int, Dict[str, Any]] = {}
         for seller in product_agent_results.get("recommended_sellers", []):
-            seller_id = seller.get("seller_id")
-            if seller_id:
-                all_sellers[seller_id] = seller
+            sid = seller.get("seller_id")
+            if sid is not None:
+                all_sellers[sid] = seller
         for seller in reliability_agent_results.get("recommended_sellers", []):
-            seller_id = seller.get("seller_id")
-            if seller_id and seller_id not in all_sellers:
-                all_sellers[seller_id] = seller
+            sid = seller.get("seller_id")
+            if sid is not None and sid not in all_sellers:
+                all_sellers[sid] = seller
 
         # 최종 추천된 판매자만 필터링
         recommended_sellers_list = [
