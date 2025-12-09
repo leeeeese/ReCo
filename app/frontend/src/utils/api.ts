@@ -116,7 +116,7 @@ class ApiClient {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(
       () => controller.abort(),
-      5000 // 일반 대화는 5초 타임아웃 (빠른 응답이어야 함)
+      35000 // 일반 대화 타임아웃 35초 (백엔드 LLM 30초 + 버퍼 5초)
     );
 
     try {

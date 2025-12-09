@@ -181,9 +181,10 @@ async def recommend_products(user_input: UserInput) -> Dict[str, Any]:
                     "location": "",
                 })
 
-        # 점수 기준 정렬
+        # 점수 기준 정렬 및 상위 10개로 제한
         final_item_scores.sort(key=lambda x: x.get(
             "final_score", 0), reverse=True)
+        final_item_scores = final_item_scores[:10]
 
         # 성공 응답 구성
         response.update({
@@ -425,6 +426,7 @@ async def chat(message: Dict[str, str]) -> Dict[str, str]:
         # LLM을 사용한 자연스러운 대화
         from server.utils.llm_agent import LLMAgent
 
+        # 일반 채팅용 LLM 에이전트 (빠른 응답을 위해 gpt-4o-mini + 짧은 타임아웃)
         chat_agent = LLMAgent(
             system_prompt="""당신은 중고거래 상품 추천 서비스 ReCo의 친절한 AI 어시스턴트입니다.
 사용자와 자연스럽고 친근하게 대화하며, 중고거래 상품 추천 서비스를 소개하고 도와드립니다.
@@ -433,8 +435,13 @@ async def chat(message: Dict[str, str]) -> Dict[str, str]:
 - 질문에는 간단명료하게 답변하세요
 - 상품 추천이 필요하면 상품명을 입력하라고 안내하세요
 - 항상 한국어로 응답하세요
-- 응답은 1-2문장으로 간결하게 작성하세요"""
+- 응답은 1-2문장으로 간결하게 작성하세요""",
+            model="gpt-4o-mini"  # 빠른 응답을 위해 4o-mini 사용
         )
+
+        # 일반 채팅용 짧은 타임아웃 설정 (30초)
+        chat_agent.request_timeout = 30.0
+        chat_agent.max_retries = 1
 
         # LLM 호출 (텍스트 형식)
         result = chat_agent.decide(

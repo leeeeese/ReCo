@@ -250,23 +250,15 @@ def product_agent_node(state: RecommendationState) -> dict:
             price_min = user_input.get("price_min")
             price_max = user_input.get("price_max")
 
-            # DB에서 조회
-            if keywords:
-                sellers_with_products = search_products_by_keywords(
-                    keywords=keywords,
-                    category=category,
-                    price_min=price_min,
-                    price_max=price_max,
-                    limit=50,
-                )
-            else:
-                sellers_with_products = get_sellers_with_products(
-                    search_query=search_query_obj if search_query_obj else None,
-                    category=category,
-                    price_min=price_min,
-                    price_max=price_max,
-                    limit=50,
-                )
+            # DB에서 조회 (검색어 필터는 사용하지 않음 - 가격/할인율 기준으로만 넓게 조회)
+            # Orchestrator가 사용자 의도를 파악해서 최종 필터링
+            sellers_with_products = get_sellers_with_products(
+                search_query=None,  # 검색어 필터 제거
+                category=category,
+                price_min=price_min,
+                price_max=price_max,
+                limit=50,
+            )
 
             logger.info(
                 "상품 특성 분석용 판매자 조회 완료",
@@ -278,38 +270,20 @@ def product_agent_node(state: RecommendationState) -> dict:
             )
 
             if not sellers_with_products:
-                # 필터를 완화하여 재시도
-                logger.warning(
-                    "검색 조건으로 상품을 찾지 못해 필터를 완화하여 재시도",
-                    extra={
-                        "original_keywords": keywords,
-                        "original_search_query": search_query_obj,
-                    }
-                )
-                sellers_with_products = get_sellers_with_products(
-                    search_query=None,
-                    category=None,
-                    category_top=None,
-                    price_min=None,
-                    price_max=None,
-                    limit=50
-                )
-
-                if not sellers_with_products:
-                    # DB에 상품이 있는지 확인
-                    from server.db.database import SessionLocal
-                    from server.db.models import Product
-                    db = SessionLocal()
-                    try:
-                        total_count = db.query(Product).count()
-                        if total_count == 0:
-                            raise ValueError(
-                                "DB에 상품 데이터가 없습니다. CSV 파일을 먼저 마이그레이션해주세요.")
-                        else:
-                            raise ValueError(
-                                f"검색 조건이 너무 엄격합니다. (DB에 총 {total_count}개 상품 존재)")
-                    finally:
-                        db.close()
+                # DB에 상품이 있는지 확인
+                from server.db.database import SessionLocal
+                from server.db.models import Product
+                db = SessionLocal()
+                try:
+                    total_count = db.query(Product).count()
+                    if total_count == 0:
+                        raise ValueError(
+                            "DB에 상품 데이터가 없습니다. CSV 파일을 먼저 마이그레이션해주세요.")
+                    else:
+                        raise ValueError(
+                            f"필터 조건에 맞는 상품이 없습니다. (DB에 총 {total_count}개 상품 존재)")
+                finally:
+                    db.close()
         except Exception as e:
             logger.exception("상품 특성 분석 에이전트 DB 조회 실패")
             raise ValueError(f"상품 특성 분석 에이전트 데이터 조회 실패: {str(e)}")

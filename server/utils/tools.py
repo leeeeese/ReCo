@@ -96,8 +96,7 @@ def calculate_diversity_score(items: List[Dict[str, Any]], key: str) -> float:
 def match_products_to_sellers(
     recommended_sellers: List[Dict[str, Any]],
     user_input: Dict[str, Any],
-    min_products_per_seller: int = 5,
-    max_products_per_seller: int = 10
+    max_products_per_seller: int = 5
 ) -> List[Dict[str, Any]]:
     """
     추천된 판매자들에게 상품을 매칭하는 룰베이스 함수
@@ -105,7 +104,6 @@ def match_products_to_sellers(
     Args:
         recommended_sellers: 추천된 판매자 리스트 (seller_id 포함)
         user_input: 사용자 입력 (search_query, price_min, price_max 등)
-        min_products_per_seller: 판매자당 희망 최소 상품 수 (기본값: 5, 실제 개수보다 적어도 반환)
         max_products_per_seller: 판매자당 최대 상품 수 (기본값: 10)
 
     Returns:
@@ -201,23 +199,9 @@ def match_products_to_sellers(
         # 점수 순으로 정렬
         scored_products.sort(key=lambda x: x["match_score"], reverse=True)
 
-        # 실제 상품 개수에 맞춰서 선택 (1개면 1개, 3개면 3개, 10개 이상이면 최대 10개)
-        # min_products_per_seller는 "희망 최소 개수"이지 "필수 최소 개수"가 아님
-        actual_count = len(scored_products)
-        num_products = min(actual_count, max_products_per_seller)
+        # 실제 상품 개수에 맞춰서 선택 (1개면 1개, 3개면 3개, 최대 10개)
+        num_products = min(len(scored_products), max_products_per_seller)
         selected_products = scored_products[:num_products]
-
-        # 상품 개수가 희망 최소 개수보다 적은 경우 로깅
-        if actual_count < min_products_per_seller:
-            logger.info(
-                "판매자 상품 개수가 희망 최소 개수보다 적음",
-                extra={
-                    "seller_id": seller_id,
-                    "seller_name": seller.get("seller_name"),
-                    "actual_count": actual_count,
-                    "min_products_per_seller": min_products_per_seller
-                }
-            )
 
         matched_results.append({
             **seller,
@@ -260,37 +244,10 @@ def _filter_products_by_user_input(
         if category and product.get("category") != category:
             continue
 
-        # 검색어 필터 (제목/설명에 포함)
-        # 불용어 제거 후 주요 키워드만 사용 (OR 조건 - 하나라도 매칭되면 통과)
-        if search_query:
-            # 불용어 목록 (한국어 조사, 어미, 의미 없는 단어)
-            stopwords = {
-                "나는", "나", "는", "은", "이", "가", "을", "를", "에", "에서", "의", "와", "과",
-                "하는", "되는", "있는", "없는", "된", "한", "하다", "되다",
-                "있다", "없다", "이다", "아니다", "그", "저", "이", "그것", "저것",
-                "것", "수", "등", "들", "및", "또한", "및", "또는",
-                "추천", "받고", "싶어", "원해", "찾아", "줘", "주세요", "해줘",
-                "친절한", "판매자가", "파는", "가격이", "싼", "비싼", "좋은"
-            }
-
-            # 검색어를 키워드로 분리하고 불용어 제거
-            keywords = [
-                kw.strip().lower()
-                for kw in search_query.split()
-                if kw.strip() and kw.strip().lower() not in stopwords
-            ]
-
-            if keywords:
-                title = product.get("title", "").lower()
-                description = product.get("description", "").lower()
-
-                # 적어도 하나의 키워드가 제목 또는 설명에 포함되면 통과 (OR 조건)
-                any_keyword_match = any(
-                    keyword in title or keyword in description
-                    for keyword in keywords
-                )
-                if not any_keyword_match:
-                    continue
+        # 검색어 필터 제거: Orchestrator가 이미 적절한 판매자를 선택했으므로
+        # 그 판매자의 모든 상품을 보여주는 것이 올바름
+        # (LLM이 "아이폰 14" 원하는 사용자에게 아이폰 판매자를 선택했다면,
+        #  그 판매자의 모든 아이폰 상품을 보여주어야 함)
 
         filtered.append(product)
 
