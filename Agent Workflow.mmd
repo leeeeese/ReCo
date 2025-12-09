@@ -1,92 +1,114 @@
 flowchart TB
 
     %% =======================
-    %% 1) INPUT & SHARED STATE
+    %% 1) USER INPUT & STATE
     %% =======================
-    subgraph SharedState["Global State (Graph State)"]
-        userQuery["user_query"]
-        persona["persona"]
-        itemCandidates["item_candidates"]
-        priceResult["price_result"]
-        safetyResult["safety_result"]
-        finalRanking["final_ranking"]
+    subgraph Input["사용자 입력"]
+        userInput["자연어 입력<br/>'친절한 판매자가 파는 가격이 싼 아이폰 14'"]
+    end
+
+    subgraph SharedState["LangGraph State (RecommendationState)"]
+        stateFields["- user_input: Dict<br/>- search_query: Dict<br/>- product_agent_recommendations: Dict<br/>- reliability_agent_recommendations: Dict<br/>- final_seller_recommendations: List<br/>- ranking_explanation: str<br/>- completed_steps: List (add reducer)"]
     end
 
     %% =======================
     %% 2) INIT NODE
     %% =======================
-    initNode["Init Node
-    - Query normalization
-    - Category parsing
-    - Persona detection
-    Output:
-      persona, parsed_query"]
+    initNode["Init Node<br/><br/>검색 쿼리 생성<br/>대화 컨텍스트 추가<br/><br/>Output:<br/>search_query, user_input"]
 
     %% =======================
-    %% 3) PRODUCT AGENT
+    %% 3) PRODUCT AGENT (병렬)
     %% =======================
-    subgraph ProductAgent["Product Agent Node"]
-        productReason["Reasoning (ReAct)
-        - product_prompt
-        - 3 core analyses:
-          - Quality pattern
-          - Price strategy
-          - Seller profiling"]
-        productTools["Tools:
-        - VectorDB search
-        - Product DB lookup
-        - Market price tool
-        - LLM reasoning (OpenAI)"]
-        productOutput["Output:
-        product_result (score, reasoning, seller_characteristics)"]
+    subgraph ProductAgent["Product Agent (gpt-4o-mini)"]
+        productReason["LLM Reasoning<br/>Prompt: product_prompt.txt<br/><br/>3가지 핵심 분석:<br/>1. 상품 품질 패턴<br/>2. 가격 전략 (시세 대비)<br/>3. 판매자 성향 프로파일"]
+        
+        productDB["DB 조회<br/>get_sellers_with_products()<br/><br/>- 검색어 필터: 없음<br/>- 모든 카테고리 조회<br/>- price_min/max만 적용<br/>- limit: 50명"]
+        
+        productOutput["Output:<br/>product_agent_recommendations<br/><br/>- recommended_sellers (47명)<br/>- product_score<br/>- reasoning"]
     end
 
     %% =======================
-    %% 4) RELIABILITY AGENT
+    %% 4) RELIABILITY AGENT (병렬)
     %% =======================
-    subgraph ReliabilityAgent["Reliability Agent Node"]
-        reliabilityReason["Reasoning (ReAct)
-        - reliability_prompt
-        - 4 core analyses:
-          - Transaction behavior
-          - Review personality
-          - Trustworthiness
-          - Activity & credibility"]
-        reliabilityTools["Tools:
-        - Seller DB lookup
-        - Review analyzer
-        - Risk pattern checker
-        - LLM reasoning (OpenAI)"]
-        reliabilityOutput["Output:
-        reliability_result (score, seller_profile_summary, reasoning)"]
+    subgraph ReliabilityAgent["Reliability Agent (gpt-4o-mini)"]
+        reliabilityReason["LLM Reasoning<br/>Prompt: reliability_prompt.txt<br/><br/>4가지 핵심 분석:<br/>1. 거래 행동 패턴<br/>2. 리뷰 기반 성향<br/>3. 신뢰도 프로파일<br/>4. 활동성 점수"]
+        
+        reliabilityDB["DB 조회<br/>get_sellers_with_products()<br/><br/>- 검색어 필터: 없음<br/>- 모든 카테고리 조회<br/>- price_min/max만 적용<br/>- limit: 50명"]
+        
+        reliabilityOutput["Output:<br/>reliability_agent_recommendations<br/><br/>- recommended_sellers (47명)<br/>- reliability_score<br/>- reasoning"]
     end
 
     %% =======================
     %% 5) ORCHESTRATOR AGENT
     %% =======================
-    subgraph Orchestrator["Orchestrator Agent"]
-        mergeNode["Aggregation Logic:
-        - Integrate multi-agent outputs
-        - Fusion of value & reliability scores
-        - Weighted ranking
-        - Buyer-seller matching optimization"]
-        finalOutput["Output:
-        final_ranking (top-K recommendations)"]
+    subgraph Orchestrator["Orchestrator Agent (gpt-5-mini)"]
+        orchestratorAnalysis["사용자 의도 분석<br/>Prompt: orchestrator_recommendation_prompt.txt<br/><br/>입력 파싱:<br/>- '친절한' → 신뢰도 중요<br/>- '가격이 싼' → 가격 중요<br/>- '아이폰 14' → 상품 키워드"]
+        
+        orchestratorFusion["Multi-agent 결과 통합<br/><br/>- ProductAgent 결과 (47명)<br/>- ReliabilityAgent 결과 (47명)<br/>- 사용자 의도 기반 가중치 적용<br/>- 최종 판매자 선택 (10명)"]
+        
+        orchestratorLLM["LLM 추론<br/>OpenAI API (gpt-5-mini)<br/><br/>Output:<br/>- seller_ids: List[int]<br/>- scores: Dict[str, float]<br/>- reasoning: str"]
     end
+
+    %% =======================
+    %% 6) RULE-BASED MATCHING
+    %% =======================
+    ruleMatch["Rule-based Product Matching<br/>match_products_to_sellers()<br/><br/>선택된 판매자의 상품 매칭:<br/>- 검색어 필터 제거<br/>  (Orchestrator가 이미 선택)<br/>- 판매자당 최대 5개 상품<br/>- 점수 기준 정렬"]
+
+    %% =======================
+    %% 7) FINAL OUTPUT
+    %% =======================
+    finalOutput["Final Output<br/><br/>- final_seller_recommendations<br/>- ranking_explanation<br/>- 상위 10개 상품<br/>- completed_steps"]
 
     %% =======================
     %% DATA FLOW
     %% =======================
+    
+    userInput --> initNode
+    initNode --> stateFields
+    
+    stateFields -- "병렬 실행" --> productDB
+    stateFields -- "병렬 실행" --> reliabilityDB
+    
+    productDB --> productReason
+    reliabilityDB --> reliabilityReason
+    
+    productReason --> productOutput
+    reliabilityReason --> reliabilityOutput
+    
+    productOutput --> orchestratorAnalysis
+    reliabilityOutput --> orchestratorAnalysis
+    
+    orchestratorAnalysis --> orchestratorFusion
+    orchestratorFusion --> orchestratorLLM
+    
+    orchestratorLLM --> ruleMatch
+    ruleMatch --> finalOutput
+    
+    finalOutput --> stateFields
 
-    userQuery --> initNode --> persona
-
-    initNode --> productReason
-    initNode --> reliabilityReason
-
-    productReason --> productTools --> productOutput --> productResult
-    reliabilityReason --> reliabilityTools --> reliabilityOutput --> reliabilityResult
-
-    productResult --> mergeNode
-    reliabilityResult --> mergeNode
-
-    mergeNode --> finalOutput --> finalRanking
+    %% =======================
+    %% EXTERNAL DEPENDENCIES
+    %% =======================
+    
+    subgraph External["External Systems"]
+        sqlite["SQLite DB<br/>Product, Seller, Review"]
+        openai["OpenAI API<br/>gpt-5-mini (Orchestrator)<br/>gpt-4o-mini (Sub-agents)"]
+    end
+    
+    productDB -.- sqlite
+    reliabilityDB -.- sqlite
+    ruleMatch -.- sqlite
+    
+    productReason -.- openai
+    reliabilityReason -.- openai
+    orchestratorLLM -.- openai
+    
+    %% =======================
+    %% STYLING
+    %% =======================
+    
+    style Orchestrator fill:#e1f5e1
+    style ProductAgent fill:#fff4e1
+    style ReliabilityAgent fill:#fff4e1
+    style orchestratorLLM fill:#ffd4d4
+    style ruleMatch fill:#e1e8f5
