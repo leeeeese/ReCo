@@ -97,7 +97,7 @@ def load_and_validate_config() -> Dict[str, Any]:
 
         # 선택적 환경 변수 (기본값 있음)
         OPENAI_MODEL = validate_type(
-            "OPENAI_MODEL", os.getenv("OPENAI_MODEL"), str, "gpt-4o-mini"
+            "OPENAI_MODEL", os.getenv("OPENAI_MODEL"), str, "gpt-5-mini"
         )
         SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # 선택사항
 

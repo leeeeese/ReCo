@@ -93,7 +93,7 @@ npm install --legacy-peer-deps  # 의존성 충돌 시
 
 **선택적 환경변수**:
 
-- `OPENAI_MODEL`: 사용할 모델 (기본값: gpt-4o-mini)
+- `OPENAI_MODEL`: 사용할 모델 (기본값: gpt-5-mini)
 - `DATABASE_URL`: 데이터베이스 URL (기본값: sqlite:///./history.db)
 - `PRICER_DATABASE_URL`: 시세 DB URL (기본값: sqlite:///./used_pricer.db)
 - `WORKFLOW_TIMEOUT_SECONDS`: 워크플로우 타임아웃 (기본값: 120초)
