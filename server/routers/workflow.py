@@ -436,7 +436,7 @@ async def chat(message: Dict[str, str]) -> Dict[str, str]:
 - 상품 추천이 필요하면 상품명을 입력하라고 안내하세요
 - 항상 한국어로 응답하세요
 - 응답은 1-2문장으로 간결하게 작성하세요""",
-            model="gpt-4o-mini"  # 빠른 응답을 위해 4o-mini 사용
+            model=config.AOAI_DEPLOY_GPT4O_MINI  # 빠른 응답을 위해 Azure GPT-4o-mini 사용
         )
 
         # 일반 채팅용 짧은 타임아웃 설정 (30초)

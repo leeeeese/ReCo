@@ -7,6 +7,7 @@ LLM 기반으로 판매자의 거래 행동 패턴, 리뷰 기반 성향, 신뢰
 from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
+from server.utils import config
 from server.workflow.agents.tool import (
     seller_profile_tool,
     review_feature_tool,
@@ -22,8 +23,8 @@ class ReliabilityAgent:
     """신뢰도 분석 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        # 서브 에이전트는 gpt-4o-mini 사용 (빠른 응답)
-        self.llm_agent = create_agent("reliability_agent", model="gpt-4o-mini")
+        # 서브 에이전트는 Azure GPT-4o-mini deployment 사용 (빠른 응답)
+        self.llm_agent = create_agent("reliability_agent", model=config.AOAI_DEPLOY_GPT4O_MINI)
         self.reliability_prompt = load_prompt("reliability_prompt")
 
     def recommend_sellers_by_reliability(

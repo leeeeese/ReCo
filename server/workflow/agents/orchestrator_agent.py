@@ -7,6 +7,7 @@ ProductAgent와 ReliabilityAgent의 결과를 통합하여
 from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
+from server.utils import config
 from server.workflow.prompts import load_prompt
 from server.utils.logger import get_logger
 from server.utils.tools import match_products_to_sellers as rule_based_match
@@ -18,8 +19,8 @@ class OrchestratorAgent:
     """최종 통합 및 랭킹 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        # 오케스트레이터는 gpt-5-mini 사용 (더 강력한 추론)
-        self.llm_agent = create_agent("final_matcher", model="gpt-5-mini")
+        # 오케스트레이터는 Azure GPT-4o deployment 사용 (더 강력한 추론)
+        self.llm_agent = create_agent("final_matcher", model=config.AOAI_DEPLOY_GPT4O)
         self.orchestrator_prompt = load_prompt(
             "orchestrator_recommendation_prompt")
 

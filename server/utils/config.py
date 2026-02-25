@@ -1,16 +1,12 @@
 """
 설정 관리 모듈
-환경 변수 로드 및 설정 관리
+환경 변수 로드 및 설정 관리 (Azure OpenAI 기반)
 """
 
 import os
 import sys
 from pathlib import Path
-<<<<<<< HEAD
-from typing import Dict, Any
-=======
 from typing import Dict, Any, List, Tuple
->>>>>>> seeun
 from dotenv import load_dotenv
 
 # .env 파일 로드
@@ -22,16 +18,8 @@ load_dotenv(dotenv_path=env_path)
 
 class ConfigValidationError(Exception):
     """설정 검증 오류"""
-
-<<<<<<< HEAD
-# 기타 설정
-UPDATE_BATCH_LIMIT = int(os.getenv("UPDATE_BATCH_LIMIT", "100"))
-USER_AGENT = os.getenv(
-    "USER_AGENT", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
-=======
     pass
 
->>>>>>> seeun
 
 def validate_required_env(env_name: str, env_value: Any, error_message: str = None):
     """필수 환경 변수 검증"""
@@ -99,101 +87,84 @@ def load_and_validate_config() -> Dict[str, Any]:
     errors: List[str] = []
 
     try:
-        # 필수 환경 변수
-        OPENAI_API_KEY = validate_required_env(
-            "OPENAI_API_KEY",
-            os.getenv("OPENAI_API_KEY"),
-            "OPENAI_API_KEY는 필수입니다. .env 파일에 설정해주세요.",
+        # ── Azure OpenAI 필수 환경 변수 ──────────────────────────────
+        AOAI_ENDPOINT = validate_required_env(
+            "AOAI_ENDPOINT",
+            os.getenv("AOAI_ENDPOINT"),
+            "AOAI_ENDPOINT는 필수입니다. .env 파일에 Azure OpenAI endpoint를 설정해주세요.",
+        )
+        AOAI_API_KEY = validate_required_env(
+            "AOAI_API_KEY",
+            os.getenv("AOAI_API_KEY"),
+            "AOAI_API_KEY는 필수입니다. .env 파일에 Azure OpenAI API key를 설정해주세요.",
         )
 
-        # 선택적 환경 변수 (기본값 있음)
-        OPENAI_MODEL = validate_type(
-            "OPENAI_MODEL", os.getenv("OPENAI_MODEL"), str, "gpt-5-mini"
+        # ── Azure OpenAI Deployment 이름 ─────────────────────────────
+        AOAI_DEPLOY_GPT4O_MINI = validate_type(
+            "AOAI_DEPLOY_GPT4O_MINI", os.getenv("AOAI_DEPLOY_GPT4O_MINI"), str, "gpt-4o-mini"
         )
-        SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # 선택사항
+        AOAI_DEPLOY_GPT4O = validate_type(
+            "AOAI_DEPLOY_GPT4O", os.getenv("AOAI_DEPLOY_GPT4O"), str, "gpt-4o"
+        )
+        AOAI_DEPLOY_EMBED_3_LARGE = os.getenv("AOAI_DEPLOY_EMBED_3_LARGE", "text-embedding-3-large")
+        AOAI_DEPLOY_EMBED_3_SMALL = os.getenv("AOAI_DEPLOY_EMBED_3_SMALL", "text-embedding-3-small")
+        AOAI_DEPLOY_EMBED_ADA = os.getenv("AOAI_DEPLOY_EMBED_ADA", "text-embedding-ada-002")
+        AOAI_API_VERSION = os.getenv("AOAI_API_VERSION", "2024-02-01")
 
+        # ── 기존 OpenAI Key (선택사항, 하위 호환성) ───────────────────
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # 선택사항
+        SERPAPI_KEY = os.getenv("SERPAPI_KEY")         # 선택사항
+
+        # ── LLM 설정 ─────────────────────────────────────────────────
         LLM_TIMEOUT_SECONDS = validate_type(
-            "LLM_TIMEOUT_SECONDS", os.getenv(
-                "LLM_TIMEOUT_SECONDS"), float, 180.0  # 기본값 180초
+            "LLM_TIMEOUT_SECONDS", os.getenv("LLM_TIMEOUT_SECONDS"), float, 180.0
         )
         LLM_TIMEOUT_SECONDS = validate_range(
             "LLM_TIMEOUT_SECONDS", LLM_TIMEOUT_SECONDS, min_value=1.0, max_value=300.0
         )
 
         LLM_MAX_RETRIES = validate_type(
-            "LLM_MAX_RETRIES", os.getenv(
-                "LLM_MAX_RETRIES"), int, 0  # 기본값 0 (리트라이 없음)
+            "LLM_MAX_RETRIES", os.getenv("LLM_MAX_RETRIES"), int, 0
         )
         LLM_MAX_RETRIES = validate_range(
             "LLM_MAX_RETRIES", LLM_MAX_RETRIES, min_value=0, max_value=10
         )
 
-        # 데이터베이스 설정
+        # ── 데이터베이스 설정 ─────────────────────────────────────────
         DATABASE_URL = validate_type(
-            "DATABASE_URL",
-            os.getenv("DATABASE_URL"),
-            str,
-            "sqlite:///./history.db",
+            "DATABASE_URL", os.getenv("DATABASE_URL"), str, "sqlite:///./history.db"
         )
-
         PRICER_DATABASE_URL = validate_type(
-            "PRICER_DATABASE_URL",
-            os.getenv("PRICER_DATABASE_URL"),
-            str,
-            "sqlite:///./used_pricer.db",
+            "PRICER_DATABASE_URL", os.getenv("PRICER_DATABASE_URL"), str, "sqlite:///./used_pricer.db"
         )
+        DB_POOL_SIZE = validate_type("DB_POOL_SIZE", os.getenv("DB_POOL_SIZE"), int, 5)
+        DB_POOL_SIZE = validate_range("DB_POOL_SIZE", DB_POOL_SIZE, min_value=1, max_value=100)
+        DB_MAX_OVERFLOW = validate_type("DB_MAX_OVERFLOW", os.getenv("DB_MAX_OVERFLOW"), int, 10)
+        DB_MAX_OVERFLOW = validate_range("DB_MAX_OVERFLOW", DB_MAX_OVERFLOW, min_value=0, max_value=200)
+        DB_POOL_TIMEOUT = validate_type("DB_POOL_TIMEOUT", os.getenv("DB_POOL_TIMEOUT"), int, 30)
+        DB_POOL_TIMEOUT = validate_range("DB_POOL_TIMEOUT", DB_POOL_TIMEOUT, min_value=1, max_value=300)
+        DB_CONN_TIMEOUT = validate_type("DB_CONN_TIMEOUT", os.getenv("DB_CONN_TIMEOUT"), int, 30)
+        DB_CONN_TIMEOUT = validate_range("DB_CONN_TIMEOUT", DB_CONN_TIMEOUT, min_value=1, max_value=300)
 
-        DB_POOL_SIZE = validate_type(
-            "DB_POOL_SIZE", os.getenv("DB_POOL_SIZE"), int, 5
-        )
-        DB_POOL_SIZE = validate_range(
-            "DB_POOL_SIZE", DB_POOL_SIZE, min_value=1, max_value=100)
-
-        DB_MAX_OVERFLOW = validate_type(
-            "DB_MAX_OVERFLOW", os.getenv("DB_MAX_OVERFLOW"), int, 10
-        )
-        DB_MAX_OVERFLOW = validate_range(
-            "DB_MAX_OVERFLOW", DB_MAX_OVERFLOW, min_value=0, max_value=200
-        )
-
-        DB_POOL_TIMEOUT = validate_type(
-            "DB_POOL_TIMEOUT", os.getenv("DB_POOL_TIMEOUT"), int, 30
-        )
-        DB_POOL_TIMEOUT = validate_range(
-            "DB_POOL_TIMEOUT", DB_POOL_TIMEOUT, min_value=1, max_value=300
-        )
-
-        DB_CONN_TIMEOUT = validate_type(
-            "DB_CONN_TIMEOUT", os.getenv("DB_CONN_TIMEOUT"), int, 30
-        )
-        DB_CONN_TIMEOUT = validate_range(
-            "DB_CONN_TIMEOUT", DB_CONN_TIMEOUT, min_value=1, max_value=300
-        )
-
-        # 서버 설정
+        # ── 서버 설정 ─────────────────────────────────────────────────
         HOST = validate_type("HOST", os.getenv("HOST"), str, "0.0.0.0")
         PORT = validate_type("PORT", os.getenv("PORT"), int, 8000)
         PORT = validate_range("PORT", PORT, min_value=1, max_value=65535)
 
         WORKFLOW_TIMEOUT_SECONDS = validate_type(
-            "WORKFLOW_TIMEOUT_SECONDS", os.getenv(
-                "WORKFLOW_TIMEOUT_SECONDS"), int, 240  # 기본값 240초
+            "WORKFLOW_TIMEOUT_SECONDS", os.getenv("WORKFLOW_TIMEOUT_SECONDS"), int, 240
         )
         WORKFLOW_TIMEOUT_SECONDS = validate_range(
-            "WORKFLOW_TIMEOUT_SECONDS",
-            WORKFLOW_TIMEOUT_SECONDS,
-            min_value=10,
-            max_value=600,
+            "WORKFLOW_TIMEOUT_SECONDS", WORKFLOW_TIMEOUT_SECONDS, min_value=10, max_value=600
         )
 
-        # 기타 설정
+        # ── 기타 설정 ─────────────────────────────────────────────────
         UPDATE_BATCH_LIMIT = validate_type(
             "UPDATE_BATCH_LIMIT", os.getenv("UPDATE_BATCH_LIMIT"), int, 100
         )
         UPDATE_BATCH_LIMIT = validate_range(
             "UPDATE_BATCH_LIMIT", UPDATE_BATCH_LIMIT, min_value=1, max_value=10000
         )
-
         USER_AGENT = validate_type(
             "USER_AGENT",
             os.getenv("USER_AGENT"),
@@ -201,18 +172,24 @@ def load_and_validate_config() -> Dict[str, Any]:
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         )
 
-        # Redis 설정 (선택사항)
+        # ── Redis 설정 ────────────────────────────────────────────────
         REDIS_URL = validate_type(
-            "REDIS_URL", os.getenv(
-                "REDIS_URL"), str, "redis://localhost:6379/0"
+            "REDIS_URL", os.getenv("REDIS_URL"), str, "redis://localhost:6379/0"
         )
         REDIS_ENABLED = validate_type(
             "REDIS_ENABLED", os.getenv("REDIS_ENABLED"), bool, False
         )
 
         return {
+            "AOAI_ENDPOINT": AOAI_ENDPOINT,
+            "AOAI_API_KEY": AOAI_API_KEY,
+            "AOAI_DEPLOY_GPT4O_MINI": AOAI_DEPLOY_GPT4O_MINI,
+            "AOAI_DEPLOY_GPT4O": AOAI_DEPLOY_GPT4O,
+            "AOAI_DEPLOY_EMBED_3_LARGE": AOAI_DEPLOY_EMBED_3_LARGE,
+            "AOAI_DEPLOY_EMBED_3_SMALL": AOAI_DEPLOY_EMBED_3_SMALL,
+            "AOAI_DEPLOY_EMBED_ADA": AOAI_DEPLOY_EMBED_ADA,
+            "AOAI_API_VERSION": AOAI_API_VERSION,
             "OPENAI_API_KEY": OPENAI_API_KEY,
-            "OPENAI_MODEL": OPENAI_MODEL,
             "SERPAPI_KEY": SERPAPI_KEY,
             "LLM_TIMEOUT_SECONDS": LLM_TIMEOUT_SECONDS,
             "LLM_MAX_RETRIES": LLM_MAX_RETRIES,
@@ -251,19 +228,28 @@ def load_and_validate_config() -> Dict[str, Any]:
 
 # ==================== 환경 변수 로드 (검증 포함) ====================
 
-# 설정 검증 및 로드
 _config = load_and_validate_config()
 
-# 전역 변수로 설정값 할당
+# ── Azure OpenAI 설정 ─────────────────────────────────────────────
+AOAI_ENDPOINT = _config.get("AOAI_ENDPOINT")
+AOAI_API_KEY = _config.get("AOAI_API_KEY")
+AOAI_DEPLOY_GPT4O_MINI = _config.get("AOAI_DEPLOY_GPT4O_MINI", "gpt-4o-mini")
+AOAI_DEPLOY_GPT4O = _config.get("AOAI_DEPLOY_GPT4O", "gpt-4o")
+AOAI_DEPLOY_EMBED_3_LARGE = _config.get("AOAI_DEPLOY_EMBED_3_LARGE", "text-embedding-3-large")
+AOAI_DEPLOY_EMBED_3_SMALL = _config.get("AOAI_DEPLOY_EMBED_3_SMALL", "text-embedding-3-small")
+AOAI_DEPLOY_EMBED_ADA = _config.get("AOAI_DEPLOY_EMBED_ADA", "text-embedding-ada-002")
+AOAI_API_VERSION = _config.get("AOAI_API_VERSION", "2024-02-01")
+
+# ── 기존 OpenAI 호환성 (선택사항) ─────────────────────────────────
 OPENAI_API_KEY = _config.get("OPENAI_API_KEY")
-OPENAI_MODEL = _config.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = AOAI_DEPLOY_GPT4O_MINI  # Azure deployment으로 대체
+
 SERPAPI_KEY = _config.get("SERPAPI_KEY")
-LLM_TIMEOUT_SECONDS = _config.get("LLM_TIMEOUT_SECONDS", 180.0)  # 180초로 증가
-LLM_MAX_RETRIES = _config.get("LLM_MAX_RETRIES", 0)  # 리트라이 없음
+LLM_TIMEOUT_SECONDS = _config.get("LLM_TIMEOUT_SECONDS", 180.0)
+LLM_MAX_RETRIES = _config.get("LLM_MAX_RETRIES", 0)
 
 DATABASE_URL = _config.get("DATABASE_URL", "sqlite:///./history.db")
-PRICER_DATABASE_URL = _config.get(
-    "PRICER_DATABASE_URL", "sqlite:///./used_pricer.db")
+PRICER_DATABASE_URL = _config.get("PRICER_DATABASE_URL", "sqlite:///./used_pricer.db")
 DB_POOL_SIZE = _config.get("DB_POOL_SIZE", 5)
 DB_MAX_OVERFLOW = _config.get("DB_MAX_OVERFLOW", 10)
 DB_POOL_TIMEOUT = _config.get("DB_POOL_TIMEOUT", 30)
@@ -271,8 +257,7 @@ DB_CONN_TIMEOUT = _config.get("DB_CONN_TIMEOUT", 30)
 
 HOST = _config.get("HOST", "0.0.0.0")
 PORT = _config.get("PORT", 8000)
-WORKFLOW_TIMEOUT_SECONDS = _config.get(
-    "WORKFLOW_TIMEOUT_SECONDS", 240)  # 180초 -> 240초 (여유있게)
+WORKFLOW_TIMEOUT_SECONDS = _config.get("WORKFLOW_TIMEOUT_SECONDS", 240)
 
 UPDATE_BATCH_LIMIT = _config.get("UPDATE_BATCH_LIMIT", 100)
 USER_AGENT = _config.get(
@@ -289,13 +274,11 @@ REDIS_ENABLED = _config.get("REDIS_ENABLED", False)
 def validate_config() -> Dict[str, Any]:
     """설정 검증 및 상태 반환 (기존 호환성)"""
     status = {
-        "openai_api_key": "✅ 설정됨" if OPENAI_API_KEY else "❌ 미설정 (필수)",
+        "aoai_endpoint": "✅ 설정됨" if AOAI_ENDPOINT else "❌ 미설정 (필수)",
+        "aoai_api_key": "✅ 설정됨" if AOAI_API_KEY else "❌ 미설정 (필수)",
         "serpapi_key": "✅ 설정됨" if SERPAPI_KEY else "⚠️ 미설정 (선택)",
         "database_url": DATABASE_URL,
-<<<<<<< HEAD
-=======
         "redis_enabled": "✅ 활성화" if REDIS_ENABLED else "❌ 비활성화",
->>>>>>> seeun
     }
     return status
 

@@ -1,25 +1,27 @@
 """
 LLM 기반 자율 의사결정 에이전트 유틸리티
 각 서브에이전트가 LLM을 활용하여 자율적으로 판단할 수 있도록 지원
+Azure OpenAI API 기반
 """
 
-import os
-from typing import Dict, Any, Optional, List
+import json
 import time
-from openai import OpenAI
-from server.utils import config
+from typing import Dict, Any, Optional, List
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+from openai import AzureOpenAI
+from server.utils import config
 
 
 class LLMAgent:
-    """LLM 기반 의사결정 에이전트"""
+    """LLM 기반 의사결정 에이전트 (Azure OpenAI)"""
 
     def __init__(self, system_prompt: str = None, model: str = None):
-        self.client = OpenAI(
-            api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-        self.model = model or OPENAI_MODEL  # 커스텀 모델 또는 기본 모델 사용
+        self.client = AzureOpenAI(
+            azure_endpoint=config.AOAI_ENDPOINT,
+            api_key=config.AOAI_API_KEY,
+            api_version=config.AOAI_API_VERSION,
+        ) if config.AOAI_ENDPOINT and config.AOAI_API_KEY else None
+        self.model = model or config.AOAI_DEPLOY_GPT4O_MINI
         self.system_prompt = system_prompt
         self.max_retries = config.LLM_MAX_RETRIES
         self.request_timeout = config.LLM_TIMEOUT_SECONDS
@@ -39,46 +41,39 @@ class LLMAgent:
             format: 출력 형식 ("json", "text")
         """
         if not self.client:
-            return {"error": "OpenAI API key not found", "fallback": True}
+            return {"error": "Azure OpenAI API 설정이 없습니다. AOAI_ENDPOINT와 AOAI_API_KEY를 확인하세요.", "fallback": True}
 
         messages = []
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
 
-        user_prompt = self._build_prompt(
-            context, decision_task, options, format)
+        user_prompt = self._build_prompt(context, decision_task, options, format)
         messages.append({"role": "user", "content": user_prompt})
 
         last_error: Optional[Exception] = None
-
         # max_retries=0이면 1번만 시도, max_retries=1이면 최대 2번 시도
         max_attempts = self.max_retries + 1
 
         for attempt in range(max_attempts):
             try:
-                # gpt-5-mini는 temperature=1만 지원하므로 파라미터 제거 (기본값 사용)
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    response_format={
-                        "type": "json_object"} if format == "json" else None,
+                    response_format={"type": "json_object"} if format == "json" else None,
                     timeout=self.request_timeout,
                 )
 
                 result = response.choices[0].message.content
                 if format == "json":
-                    import json
                     try:
                         return json.loads(result)
                     except json.JSONDecodeError:
-                        # JSON 파싱 실패 시 텍스트로 반환
-                        logger.warning(f"JSON 파싱 실패, 텍스트로 반환: {result[:100]}")
                         return {"result": result, "error": "JSON 파싱 실패"}
                 return {"result": result}
 
             except Exception as e:
                 last_error = e
-                if attempt < max_attempts - 1:  # 마지막 시도가 아니면 재시도
+                if attempt < max_attempts - 1:
                     sleep_for = 2 ** attempt
                     time.sleep(sleep_for)
                     continue
@@ -87,11 +82,9 @@ class LLMAgent:
 
     def _build_prompt(self, context: Dict[str, Any], task: str, options: Optional[List[Any]], format: str = "json") -> str:
         """프롬프트 구성"""
-        # format이 "text"인 경우 간단한 프롬프트
         if format == "text":
             return task
 
-        # JSON 형식인 경우 기존 로직 사용
         prompt = f"다음 정보를 바탕으로 {task}를 수행해주세요.\n\n"
         prompt += "## 컨텍스트 정보:\n"
         for key, value in context.items():
@@ -119,7 +112,7 @@ class LLMAgent:
             combination_task: 종합 분석 작업 설명
         """
         if not self.client:
-            return {"error": "OpenAI API key not found"}
+            return {"error": "Azure OpenAI API 설정이 없습니다"}
 
         context = {
             "sub_agent_results": sub_agent_results,
@@ -131,7 +124,6 @@ class LLMAgent:
 
 def create_agent(agent_type: str, system_prompt: str = None, model: str = None) -> LLMAgent:
     """에이전트 타입별로 생성"""
-    # 기본 프롬프트 (모든 에이전트에 공통 적용)
     default_prompt = """You are the primary ReAct agent that transforms marketplace signals into a structured seller evaluation profile.
 
     Core Objective:

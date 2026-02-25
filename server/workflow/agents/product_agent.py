@@ -7,6 +7,7 @@ LLM 기반으로 판매자의 상품 품질 패턴, 시세 대비 가격 전략,
 from typing import Dict, Any, List
 from server.workflow.state import RecommendationState
 from server.utils.llm_agent import create_agent
+from server.utils import config
 from server.workflow.agents.tool import (
     seller_profile_tool,
     item_market_tool,
@@ -23,8 +24,8 @@ class ProductAgent:
     """상품 특성 분석 에이전트 - LLM 기반 자율 판단"""
 
     def __init__(self):
-        # 서브 에이전트는 gpt-4o-mini 사용 (빠른 응답)
-        self.llm_agent = create_agent("product_agent", model="gpt-4o-mini")
+        # 서브 에이전트는 Azure GPT-4o-mini deployment 사용 (빠른 응답)
+        self.llm_agent = create_agent("product_agent", model=config.AOAI_DEPLOY_GPT4O_MINI)
         self.product_prompt = load_prompt("product_prompt")
 
     def recommend_sellers_by_product_characteristics(
